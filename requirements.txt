@@ -1,0 +1,11 @@
+pynput
+tavily-python
+requests
+Pillow
+send2trash
+yt-dlp
+pycaw
+psutil
+soundfile
+sounddevice
+numpy

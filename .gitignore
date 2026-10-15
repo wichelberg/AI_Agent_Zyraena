@@ -1,0 +1,20 @@
+# Secrets and personal data (examples are committed instead)
+.env
+personality.md
+config.json
+chat_logs/
+run_logs/
+assets/user.*
+assets/Zyraena_full.png
+
+# Build output
+build/
+dist/
+*.spec
+*.exe
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
