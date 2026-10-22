@@ -1,0 +1,178 @@
+ZYRAENA - GERCEK CALISMA SEMASI (koddan cikarildi, 2026-10-21; API Process isaretleri 2026-10-22)
+=====================================================================
+
+Kisa ozet: Senin bildigin semadan en buyuk fark su: "API process -> Task -> Tool -> Done -> API process"
+tek bir cagri degil, bir DONGU. Model her araci cagirdiginda arac PC'de calisir, sonucu modele geri
+gider ve model YENIDEN cagrilir (en fazla 20 tur). Her turda sistem promptu + TUM sohbet gecmisi +
+49 aracin tanimi bastan gonderilir. Konusma tarafi (STT ve TTS) tamamen yerel, ucretsiz.
+
+Isaretler:
+  [API Process]  = API kredisinden PARA HARCAYAN adim (OpenRouter veya Tavily)
+  [yerel]        = PC'de calisir, ucretsiz
+
+
+---------------------------------------------------------------------
+0) API PROCESS LISTESI - kredinin harcandigi TUM yerler (bu kadar, baska yok)
+---------------------------------------------------------------------
+
+ #  Ne                         Saglayici   Kod (dosya -> fonksiyon)                     Ne zaman
+ -- -------------------------- ----------- -------------------------------------------- ---------------------------
+ A  Sohbet cekirdegi           OpenRouter  ai_assistant.py -> _openai_compat_request     her mesajda, her arac turunda
+                                           (cagiran: _send_message / answer_message)      (bkz. 3) - EN BUYUK HARCAMA
+ B  Web aramasi (web_search)   Tavily      ai_assistant.py -> web_search                 model web_search araci isterse
+ C  Telegram sesli not yazisi  OpenRouter  voice.py -> transcribe_openrouter             yerel Whisper yoksa / oyunda /
+                                           (cagiran: voice.transcribe, telegram_listener) bos donerse (bkz. 2)
+ D  Disk klasor tahmini        OpenRouter  ai_assistant.py -> ask_flash                  disk_watch bilinmeyen klasor
+                                           (cagiran: disk_watch)                          gorurse (bkz. 5)
+
+ Para HARCAMAYAN ama API'ye giden: bakiye sorgulari (ai_assistant.openrouter_balance -> /credits,
+ _get_tavily_credits -> Tavily /usage). Ctrl+F1 paneli ve /kredi bunlari kullanir; ucretsiz.
+ /c ile Claude Code: OpenRouter degil, Claude Code aboneligi (API kredisi yemez).
+
+ Plan degistirirken: A'nin modeli .env'de OPENROUTER_ASSISTANT_MODEL (varsayilan google/gemini-3.7-flash)
+ ve OPENROUTER_LADY_MODEL (varsayilan anthropic/claude-haiku-5.5). C ve D assistant modunun modelini kullanir.
+ B ayri hesap: TAVILY_API_KEY.
+
+
+---------------------------------------------------------------------
+1) SESLI AKIS - PC mikrofonu ("Zyraena acil")
+---------------------------------------------------------------------
+
+ [yerel] voice_guard.py  (15 sn'de bir nvidia-smi)
+    |  "ready" modu: prizde, oyun yok, GPU sakin -> Whisper + Chatterbox onceden yuklu
+    |  "game"/pil -> her sey kapali, mikrofon da kapali
+    v
+ [yerel] wake.py  - mikrofon surekli acik (sadece "ready" iken)
+    |  CPU ses seviyesi kesici: 0.4-3.5 sn'lik parcalari ayirir
+    |  her parca -> yerel Whisper (GPU, ~0.3 sn) -> metinde "Zyraena" + "ac..." var mi?
+    |  (buradan OpenRouter'a hicbir sey gitmez)
+    v
+ [yerel] voice_session.py  - konusma basladi
+    |  glow.py kenar isigi yanar, pet "listen" animasyonu
+    |  voice.Recorder dinler; sessizlik gelince tur biter
+    |  - hic konusma yoksa veya 15 sn araliksiz ses (video) -> GONDERILMEZ, tekrar dinler
+    v
+ [yerel] Speech-to-text: speech_worker.py (faster-whisper, model owner-20261018, GPU)
+    |  sadece yerel; Whisper yuklu degilse bos metin -> hicbir sey gonderilmez
+    v
+ [yerel] "Zyraena kapat" kontrolu -> varsa oturum kapanir, hicbir sey gonderilmez
+    v
+ metin + SPOKEN_HINT ("kisa cevap ver, liste/markdown yok")
+    v
+ [API Process A] ai_assistant.answer_message(source="voice")   <-- METIN AKISIYLA AYNI CEKIRDEK (bkz. 3)
+    v
+ cevap metni
+    v
+ [yerel] voice.speak
+    |  speakable(): markdown/link/emoji silinir, 700 karakterden sonrasi kesilir
+    |  tts_text: sayilar yaziya, isimler okunusa, cumlelere bolunur (ilk parca kisa)
+    |  her cumle: Chatterbox (tts_worker.py, GPU) -> RVC ses paketi (voice_worker.py, DirectML)
+    |  iki asama ust uste calisir: cumle n RVC'deyken cumle n+1 Chatterbox'ta
+    |  sirayla hoparlorden calinir
+    |  - oyun / GPU mesgul / cok yavas -> sesli soylenmez, cevap Telegram'a METIN olarak gider
+    v
+ tekrar dinler (2. adima doner); 30 sn hic konusma yoksa oturum kapanir
+
+
+---------------------------------------------------------------------
+2) SESLI AKIS - Telegram sesli mesaj
+---------------------------------------------------------------------
+
+ Telegram sesli not -> claude_comm router -> inbox.jsonl -> telegram_listener._work_loop
+    v
+ indir -> wav'a cevir
+    v
+ Speech-to-text: voice.transcribe
+    |  [yerel]          once yerel Whisper
+    |  [API Process C]  Whisper yoksa / oyun modundaysa / bos donerse
+    |                   -> voice.transcribe_openrouter: Gemini Flash (OpenRouter, ses girisi)
+    v
+ Telegram'da Evet/Hayir: "bunu mu dedin?"  -> Hayir ise biter (cekirdege gitmez)
+    v
+ [API Process A] ai_assistant.answer_message(source="telegram")   <-- cekirdek (bkz. 3)
+    v
+ cevap Telegram'a METIN olarak gider (sesli cevap yok)
+
+
+---------------------------------------------------------------------
+3) CEKIRDEK - ai_assistant._send_message (her yol buradan gecer) = API Process A
+---------------------------------------------------------------------
+
+ kullanici metni -> chat["messages"] gecmisine eklenir
+    v
+ +--> [API Process A] OpenRouter istegi (POST /chat/completions, _openai_compat_request)
+ |        gonderilen: sistem promptu (mod + saat)
+ |                  + TUM sohbet gecmisi (kisaltilmaz; sadece eski ekran goruntuleri silinir)
+ |                  + 49 aracin JSON tanimi (~26 bin karakter)
+ |        model: assistant modu = google/gemini-3.7-flash (varsayilan)
+ |               lady modu      = anthropic/claude-haiku-5.5 (personality.md ile)
+ |        v
+ |   model arac istedi mi?
+ |     HAYIR -> cevap metni -> bitti (Done)
+ |     EVET  -> her arac PC'de calisir [yerel]
+ |              - PC'yi degistiren araclar once onay ister
+ |                (metin kutusunda neon Evet/Hayir, Telegram'da butonlar)
+ |              - web_search -> [API Process B] Tavily
+ |              - look_at_screen -> ekran goruntusu bir sonraki istege resim olarak eklenir
+ |                (bir sonraki API Process A istegini buyutur)
+ |              - arac sonuclari gecmise eklenir
+ |                v
+ +--------------- tekrar [API Process A] OpenRouter'a (en fazla 20 tur)
+
+ Not: arac kullanilan her cevapta en az 2 API Process A istegi var. Son istek sadece sonucu cumleye
+ dokmek icin, ama yine tum gecmis + 49 arac tanimi ile gider.
+
+
+---------------------------------------------------------------------
+4) METIN AKISI
+---------------------------------------------------------------------
+
+ a) Pet'e tikla -> neon metin kutusu (chat_box.py)
+    yaz + Enter -> pet "think" -> [API Process A] answer_message(source="box") -> cekirdek (3)
+    -> cevap kutuda metin olarak, pet okuma suresi kadar "talk" animasyonu (sessiz)
+    Her kutu acilisi yeni sohbet (gecmis sifirdan).
+
+ b) Telegram metin -> claude_comm router -> inbox.jsonl -> _work_loop
+    - /yeni, /iptal, /ss, /kredi  -> [yerel] modele HIC gitmez, direkt islenir
+                  (/kredi sadece ucretsiz bakiye sorgusu yapar)
+    - /c <is>  -> claude_bridge: basliksiz Claude Code oturumu (claude -p)
+                  (OpenRouter degil; Claude Code aboneligi, API kredisi yemez)
+    - diger her sey -> [API Process A] answer_message(source="telegram") -> cekirdek (3)
+                  60 dk sessizlikten sonra sohbet sifirlanir
+    -> cevap Telegram'a metin + "(assistant)" etiketi
+
+
+---------------------------------------------------------------------
+5) DIGER API PROCESS CAGRILARI
+---------------------------------------------------------------------
+
+ - [API Process D] disk_watch -> ai_assistant.ask_flash: Gemini Flash'a tek soru, arac yok, gecmis yok
+   (bilinmeyen klasorler icin)
+ - [API Process C] Telegram sesli notu Whisper'siz -> Gemini ses transkripti (2. akis)
+ - Hepsi credit_log.sqlite'a yazilir (Ctrl+F1 panel -> Krediler sekmesi)
+
+
+---------------------------------------------------------------------
+6) PARA NEREYE GIDIYOR (credit_log.sqlite'tan olculen)
+---------------------------------------------------------------------
+
+ Sesli turlar: 16 kayit, toplam $0.153, tur basina ortalama ~$0.0096, ortalama 2.4 istek/tur.
+ Ornek turlar (hepsi API Process A):
+   istek 1: 6260 prompt token,  96 cevap token  (arac: list_directory)
+   istek 2: 5043 prompt token,  28 cevap token  (arac: open_path)
+   istek 3: 5084 prompt token,  12 cevap token  (son cevap)
+
+ Yani maliyetin ~%95+'i GIRDI tokeni, cikti degil. O girdinin buyuk kismi her istekte tekrar
+ gonderilen 49 arac tanimi (~5-6 bin token). Cevabin uzunlugu maliyeti neredeyse hic etkilemiyor.
+
+ Yapi degisikligi icin en buyuk kaldiraclar (buyukten kucuge, hepsi API Process A'yi kucultur):
+   1. Her istekte 49 aracin hepsini gondermemek: istege gore kucuk bir arac alt kumesi sec
+      (yerel anahtar kelime / yerel kucuk model ile yonlendirme). Tek basina en buyuk kazanc.
+   2. Sik komutlari modele hic gondermemek (Telegram'daki /iptal gibi): "muzigi durdur",
+      "sesi ac", "ekran goruntusu" gibi kaliplar yerelde eslenip direkt arac calistirilabilir.
+   3. Arac sonrasi "son cevap" istegi: basit araclarda (open_path, medya) sonucu sabit bir
+      cumleyle dondurup 2. istegi atlamak.
+   4. Gecmisi kirpmak / ozetlemek (simdi hic kisaltilmiyor; uzun Telegram sohbetlerinde buyur).
+   5. Saglayici tarafi prompt cache: sistem promptu + arac tanimlari sabit oldugu surece
+      onbellege alinabilir. Saat sistem promptunun sonunda; dakikada bir degistigi icin
+      sabit kisim ondan once kalmali (simdi de oyle).

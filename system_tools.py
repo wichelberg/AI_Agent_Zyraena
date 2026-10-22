@@ -559,10 +559,12 @@ def _cancel_plan():
 
 
 def cancel_shutdown() -> str:
-    """Cancels Zyraena's plan and any shutdown Windows is already counting down."""
+    """Cancels Zyraena's plan and any shutdown Windows is already counting down (e.g. one planned by a
+    Claude Code session in sleep mode)."""
     plan = _cancel_plan()
-    subprocess.run(["shutdown", "/a"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-    return "Cancelled the planned shutdown; the PC stays on." if plan else "No shutdown was planned."
+    aborted = subprocess.run(["shutdown", "/a"], capture_output=True,
+                             creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0
+    return "Cancelled the planned shutdown; the PC stays on." if plan or aborted else "No shutdown was planned."
 
 
 def shutdown_status() -> str:

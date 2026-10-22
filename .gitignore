@@ -6,6 +6,7 @@ chat_logs/
 run_logs/
 assets/user.*
 assets/Zyraena_full.png
+whatsapp_uia_dump*.txt
 
 # Build output
 build/
@@ -18,3 +19,20 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Zyraena's character (desktop pet): Blender model, reference photos, renders, sprites.
+# Kept out of the repo; the pushed version has no character.
+pet/
+assets/pet/
+# Read-aloud texts for train_stt.py / voice_recorder.py (they tell her story)
+voice_reading_tr.txt
+voice_sentences_tr.txt
+
+# Desktop pet on/off (per machine)
+pet.json
+pet_log*.txt
+
+# Owner voice recordings for train_stt.py (personal data)
+UserVoice/
+# Reference recordings for Zyraena's own voice (TTS / RVC)
+ZyraenaVoice/

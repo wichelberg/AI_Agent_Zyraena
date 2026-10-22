@@ -6,8 +6,17 @@ import ai_assistant
 import alert
 import check_event
 import config_loader
+import desktop_pet
+import disk_actions
+import disk_watch
 import health_monitor
+import i18n
+import pc_tools
 import telegram_listener
+import voice_guard
+import voice_session
+import wake
+import web_control
 
 RELOAD_INTERVAL_SECONDS = 1 * 60
 
@@ -54,11 +63,48 @@ def supervisor_loop():
         config_loader.wait_for_reload(RELOAD_INTERVAL_SECONDS)
 
 
+def _extension_problem(text):
+    """The Web Control extension can't work (web_control.watch): said by the pet and sent on Telegram."""
+    print(f"Web control: {text}")
+    desktop_pet.say("🧩 " + text, seconds=20)
+    pc_tools.fallback_notify("🧩 " + text)
+
+
+def _clean_mei():
+    """Deletes the Temp\\_MEI folders force-closed Zyraena exes left behind (disk_actions.clean_mei)."""
+    try:
+        removed, kept = disk_actions.clean_mei()
+    except Exception as e:
+        print(f"_MEI clean-up failed: {e}")
+        return
+    if removed or kept:
+        print(f"_MEI clean-up: {len(removed)} deleted, {len(kept)} still in use")
+
+
+def _disk_findings(found):
+    """The daily disk scan found something new: one bubble, a click opens the Disk tab."""
+    print("Disk: " + "; ".join(f.text for f in found))
+    desktop_pet.say(i18n.get(ai_assistant.current_language(), "disk_findings"), seconds=30,
+                    on_click=ai_assistant.open_disk_panel)
+
+
 def main():
+    threading.Thread(target=_clean_mei, daemon=True).start()
     threading.Thread(target=supervisor_loop, daemon=True).start()
     ai_assistant.start_ai_assistant()
+    desktop_pet.start(on_click=ai_assistant.toggle_chat_box, language=ai_assistant.current_language)
     telegram_listener.start()
     health_monitor.start()
+    voice_guard.start()
+    voice_session.setup(answer=lambda chat, text: ai_assistant.answer_message(chat, text, source="voice"),
+                        new_chat=ai_assistant.new_chat,
+                        notify=lambda text: pc_tools.fallback_notify(text),  # Telegram, once it's connected
+                        activity=desktop_pet.activity, log_dir=ai_assistant.CHAT_LOG_DIR)
+    wake.start(on_wake=voice_session.start, paused=voice_session.active)
+    web_control.start()
+    web_control.watch(notify=_extension_problem, lang=ai_assistant.current_language)
+    disk_watch.configure(ask=ai_assistant.ask_flash, notify=_disk_findings, lang=ai_assistant.current_language)
+    disk_watch.start()
 
     root = tk.Tk()
     root.withdraw()

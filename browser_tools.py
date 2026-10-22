@@ -1,10 +1,10 @@
 """Tools that let Zyraena open sites and YouTube videos in Opera GX.
 
-This is the "light" approach: Zyraena never connects to the browser, she only
-hands it URLs (Opera opens them in a new tab of the running window, or starts
-first) and presses YouTube keyboard shortcuts on the focused Opera window. It
-works with the normal Opera profile; the trade-off is that Zyraena can't see or
-click inside pages.
+This is the "light" approach: Zyraena only hands Opera URLs (it opens them in a new tab of
+the running window, or starts first). Everything inside pages, the video's loop, volume and
+mute included, goes through the Zyraena Web Control extension (web_control.py). The one key
+press left here is YouTube's own "f" for fullscreen (press_fullscreen): browsers allow
+fullscreen only after a real key press or click, which an extension can't make.
 
 Opening pages doesn't change anything on the PC, so unlike pc_tools these don't
 ask for confirmation.
@@ -16,28 +16,13 @@ import time
 import winreg
 from urllib.parse import quote_plus, urlparse
 
-from pynput.keyboard import Controller, Key
+from pynput.keyboard import Controller
 
 OPERA_REG_KEY = r"Software\Clients\StartMenuInternet\Opera GXStable\shell\open\command"
 OPERA_PROCESS = "opera.exe"
 YOUTUBE_RESULTS = 10
 FOCUS_WAIT_SECONDS = 0.4
-
-# Shortcuts pressed in Opera GX's current tab. Pausing is media_tools.media_key (needs no focus).
-# "loop" and VOLUME_KEYS are shortcuts of the Zyraena Video Controls extension
-# (extensions/video-loop). It shows its state as marks in the tab title, which ends up in
-# Opera's window title: LOOP_MARK while the video loops, VOLUME_MARK while it waits for a
-# typed volume and right after setting it.
-VIDEO_KEYS = {"fullscreen": ("f",), "mute": ("m",), "close_tab": (Key.ctrl, "w"), "loop": (Key.alt, Key.shift, "l")}
-VOLUME_KEYS = (Key.alt, Key.shift, "v")
-LOOP_MARK = "🔁"
-VOLUME_MARK = "🔊"
-LOOP_WAIT_SECONDS = 0.8
-EXTENSION_WAIT_SECONDS = 1.5
-_EXTENSION_HINT = (
-    "the Zyraena Video Controls extension isn't installed or reloaded in Opera GX (it's in "
-    "extensions/video-loop of Zyraena's repo: opera://extensions > Developer mode > Load unpacked)"
-)
+FULLSCREEN_KEY = ("f",)  # YouTube's own shortcut (no extension involved)
 
 _user32 = ctypes.windll.user32
 _keyboard = Controller()
@@ -164,13 +149,6 @@ def _focus(hwnd):
     return _user32.GetForegroundWindow() == hwnd
 
 
-def _window_title(hwnd):
-    length = _user32.GetWindowTextLengthW(hwnd)
-    title = ctypes.create_unicode_buffer(length + 1)
-    _user32.GetWindowTextW(hwnd, title, length + 1)
-    return title.value
-
-
 def _press(keys):
     for k in keys:
         _keyboard.press(k)
@@ -188,46 +166,13 @@ def _focused_opera():
     return hwnd
 
 
-def _loop_state(hwnd):
-    time.sleep(LOOP_WAIT_SECONDS)
-    if LOOP_MARK in _window_title(hwnd):
-        return "Loop is ON: the current video repeats until loop is turned off."
-    return f"Loop is OFF now (or {_EXTENSION_HINT})."
-
-
-def set_video_volume(percent: int) -> str:
+def press_fullscreen() -> str:
+    """YouTube's "f" in Opera GX's current tab (web_control.control_video's 'fullscreen')."""
     def run():
-        level = max(0, min(100, int(percent)))
-        hwnd = _focused_opera()
-        _press(VOLUME_KEYS)
-        # Only type the number once the extension is listening: otherwise the digits would
-        # reach the page (on YouTube they seek in the video).
-        deadline = time.monotonic() + EXTENSION_WAIT_SECONDS
-        while VOLUME_MARK not in _window_title(hwnd):
-            if time.monotonic() > deadline:
-                raise ToolError(f"The video didn't respond, so I typed nothing. Probably {_EXTENSION_HINT}.")
-            time.sleep(0.1)
-        if _user32.GetForegroundWindow() != hwnd:
-            raise ToolError("Opera GX lost focus, so I didn't type the volume.")
-        _keyboard.type(str(level))
-        _press((Key.enter,))
-        time.sleep(LOOP_WAIT_SECONDS)
-        if f"{VOLUME_MARK}{level}%" in _window_title(hwnd):
-            return f"The video's volume is now {level}% (the PC's own volume is unchanged)."
-        return "Typed the volume but couldn't confirm it; use look_at_screen to check."
-    return _run(run)
-
-
-def control_browser(action: str) -> str:
-    def run():
-        key = VIDEO_KEYS.get(action)
-        if key is None:
-            raise ToolError(f"Unknown action. Use one of: {', '.join(VIDEO_KEYS)}.")
-        hwnd = _focused_opera()
-        _press(key)
-        if action == "loop":
-            return _loop_state(hwnd)
-        return f"Did '{action}' in Opera GX's current tab (keyboard shortcut); use look_at_screen to verify if needed."
+        _focused_opera()
+        _press(FULLSCREEN_KEY)
+        return ("Pressed YouTube's fullscreen key (f) in Opera GX's current tab: it toggles fullscreen. "
+                "Use look_at_screen to check if needed.")
     return _run(run)
 
 
@@ -266,28 +211,10 @@ TOOLS = [
         {"number": {"type": "integer", "description": "The video's number in the list (1 = first)."}},
         ["number"],
     ),
-    _tool(
-        "control_browser",
-        "Acts on Opera GX's current tab with keyboard shortcuts: 'fullscreen' toggles a YouTube video's "
-        "fullscreen (also exits it), 'mute' toggles the video's sound, 'close_tab' closes the tab, 'loop' "
-        "turns repeating the current video on or off (the answer says which). "
-        "To pause/resume, use media_key instead.",
-        {"action": {"type": "string", "enum": list(VIDEO_KEYS), "description": "What to do."}},
-        ["action"],
-    ),
-    _tool(
-        "set_video_volume",
-        "Sets the volume of the video playing in Opera GX's current tab (e.g. YouTube's own volume slider) "
-        "to a percent, leaving the PC's volume alone. For the PC's master volume use set_volume instead.",
-        {"percent": {"type": "integer", "description": "0-100"}},
-        ["percent"],
-    ),
 ]
 
 TOOL_FUNCTIONS = {
     "open_in_browser": open_in_browser,
     "search_youtube": search_youtube,
     "open_youtube_result": open_youtube_result,
-    "control_browser": control_browser,
-    "set_video_volume": set_video_volume,
 }

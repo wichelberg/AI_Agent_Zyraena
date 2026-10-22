@@ -25,11 +25,12 @@ def trigger_alert(name: str, sound_path: str) -> None:
         remote_hook(name)
 
 
-def show_choice(token, text, sound_path, choices, on_choice, title="Zyraena"):
-    """Thread-safe popup with a looping sound and one button per choice. on_choice(index) runs
-    on the Tk thread when a button is clicked; closing the window only stops the sound.
+def show_choice(token, text, sound_path, choices, on_choice, title="Zyraena", close_choice=None):
+    """Thread-safe popup with a looping sound (none if sound_path is None) and one button per
+    choice. on_choice(index) runs on the Tk thread when a button is clicked; closing the window
+    only stops the sound, or counts as clicking choices[close_choice] if that's given.
     close(token) removes the popup (e.g. once the question was answered elsewhere)."""
-    _queue.put(("popup", token, text, sound_path, tuple(choices), on_choice, title))
+    _queue.put(("popup", token, text, sound_path, tuple(choices), on_choice, title, close_choice))
 
 
 def close(token) -> None:
@@ -37,10 +38,11 @@ def close(token) -> None:
     _queue.put(("close", token))
 
 
-def _open_popup(root, token, text, sound_path, choices, on_choice, title):
+def _open_popup(root, token, text, sound_path, choices, on_choice, title, close_choice=None):
     alias = f"event_alert_{next(_alias_counter)}"
-    _mci(f'open "{sound_path}" alias {alias}')
-    _mci(f"play {alias} repeat")
+    if sound_path is not None:
+        _mci(f'open "{sound_path}" alias {alias}')
+        _mci(f"play {alias} repeat")
 
     win = tk.Toplevel(root)
     win.title(title)
@@ -65,7 +67,12 @@ def _open_popup(root, token, text, sound_path, choices, on_choice, title):
     buttons.pack(pady=(0, 20))
     for index, label in enumerate(choices):
         tk.Button(buttons, text=label, command=lambda i=index: choose(i), padx=10).pack(side="left", padx=6)
-    win.protocol("WM_DELETE_WINDOW", close_popup if on_choice is not None else lambda: choose(0))
+    if on_choice is None:
+        win.protocol("WM_DELETE_WINDOW", lambda: choose(0))
+    elif close_choice is not None:
+        win.protocol("WM_DELETE_WINDOW", lambda: choose(close_choice))
+    else:
+        win.protocol("WM_DELETE_WINDOW", close_popup)
     if token is not None:
         _popups[token] = close_popup
 

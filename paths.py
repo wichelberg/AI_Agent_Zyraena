@@ -28,6 +28,14 @@ def resource_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+def voice_home() -> Path:
+    """Local speech files: voice_env (env/), the Whisper model (models/) and recorded
+    training samples (data/). Outside the app folder so the exe and a source checkout
+    share them."""
+    custom = os.environ.get("ZYRAENA_VOICE_HOME", "").strip()
+    return Path(custom) if custom else Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Zyraena" / "voice"
+
+
 # Keys that came from Zyraena's .env (not from the real environment). They're Zyraena's settings,
 # so programs she starts (Claude Code) don't get them: e.g. an ANTHROPIC_API_KEY there would make
 # Claude Code bill that key instead of the user's own login.
@@ -54,4 +62,15 @@ def load_env(path=None):
             os.environ.setdefault(ENV_PREFIX + key[len(LEGACY_ENV_PREFIX):], value)
 
 
+def drop_editor_env():
+    """Removes what VS Code sets for its extension host. Zyraena inherits it when a Claude Code
+    session in VS Code starts her (e.g. after a rebuild), and every program she launches would get
+    it too: ELECTRON_RUN_AS_NODE makes VS Code (and any Electron app) run as plain Node, treat the
+    folder as a script and quit without a window; VSCODE_* point it at the editor that started her."""
+    for key in list(os.environ):
+        if key.upper() == "ELECTRON_RUN_AS_NODE" or key.upper().startswith("VSCODE_"):
+            del os.environ[key]
+
+
+drop_editor_env()
 load_env()

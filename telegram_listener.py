@@ -29,6 +29,7 @@ import pc_tools
 import screen_tools
 import system_tools
 import voice
+import voice_data
 
 LANGUAGE = "tr"
 CLAUDE_PREFIX = "/c"
@@ -202,9 +203,17 @@ def _download(backend, file_id):
 
 
 def _hear(backend, file_id):
-    """A Telegram voice note -> its transcript ('' if nothing understandable was said)."""
+    """A Telegram voice note -> (wav bytes, its transcript: '' if nothing understandable was said)."""
     audio = voice.to_wav_bytes(_download(backend, file_id))
-    return voice.transcribe(audio, ai_assistant.MODES["assistant"]["model"])
+    return audio, voice.transcribe(audio, ai_assistant.MODES["assistant"]["model"])
+
+
+def _keep_sample(audio, heard):
+    """A confirmed voice note is a right (audio, text) pair for training speech-to-text."""
+    try:
+        voice_data.save(audio, heard, "telegram", heard=heard)
+    except Exception as e:
+        print(f"Telegram: couldn't save the voice sample: {e}")
 
 
 def _work_loop(comm, backend):
@@ -216,7 +225,7 @@ def _work_loop(comm, backend):
             if entry.get("voice"):
                 # Replies stay text-only (voice notes cost credit); a voice request only runs once
                 # the user confirms Zyraena understood it right.
-                heard = _hear(backend, entry["voice"])
+                audio, heard = _hear(backend, entry["voice"])
                 if not heard:
                     _send(backend, i18n.get(LANGUAGE, "voice_not_understood"))
                     continue
@@ -224,6 +233,7 @@ def _work_loop(comm, backend):
                 if not _confirm(comm, backend, "voice_confirm", text=text):
                     _send(backend, i18n.get(LANGUAGE, "voice_declined"))
                     continue
+                _keep_sample(audio, heard)
             result = _handle(comm, backend, text)
         except Exception as e:
             result = (i18n.get(LANGUAGE, "generic_error", error=e), None)
@@ -260,7 +270,7 @@ def _handle(comm, backend, text):
         notify = lambda key, **kwargs: _send(backend, i18n.render(LANGUAGE, key, **kwargs))
         photo = lambda jpeg, caption: _send_photo(backend, jpeg, caption)
         with pc_tools.channel(confirm, notify, photo):
-            reply = ai_assistant.answer_message(_chat["messages"], text, LANGUAGE)
+            reply = ai_assistant.answer_message(_chat["messages"], text, LANGUAGE, source="telegram")
     _log(ai_assistant.AI_NAME, reply)
     if label is None:
         label = _chat["messages"]["mode"] if _chat["messages"] else ai_assistant.default_mode()

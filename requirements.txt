@@ -9,3 +9,5 @@ psutil
 soundfile
 sounddevice
 numpy
+websockets
+comtypes

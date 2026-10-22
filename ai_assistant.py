@@ -3,21 +3,23 @@ import os
 import re
 import threading
 import time
-import tkinter as tk
 import uuid
 from collections import deque
 from datetime import datetime
-from tkinter import messagebox
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageTk
 from pynput import keyboard
 from tavily import TavilyClient
 
+import desktop_pet
 import i18n
 import paths
 import browser_tools
+import chat_box
+import control_panel
+import credit_log
+import disk_watch
 import media_tools
 import pc_tools
 import reminder_tools
@@ -25,30 +27,14 @@ import screen_tools
 import sleep_mode
 import steam_tools
 import system_tools
-import voice
+import web_control
 import whatsapp_tools
 
 AI_NAME = "Zyraena"
-AI_AVATAR = "Zyraena.png"
 USER_NAME = os.environ.get("ZYRAENA_USER_NAME", "").strip() or "You"
-USER_AVATAR = "user.jpg"  # optional: put your own picture in assets/
 
 CHAT_LOG_DIR = paths.app_dir() / "chat_logs"
 CHAT_LOG_DIR.mkdir(exist_ok=True)
-
-AVATAR_DIR = paths.resource_dir() / "assets"
-AVATAR_SIZE = 25
-HEADER_AVATAR_SIZE = 140
-
-# Theme: white / gold / purple, futuristic accents
-BG_COLOR = "#241333"     # near-black purple (window background / frames)
-PURPLE = "#7A3FC4"       # user label color / glow accent
-GOLD = "#D4AF37"         # buttons, borders
-GOLD_TEXT = "#9C7A00"    # Zyraena label color (readable on white)
-GOLD_LIGHT = "#F1D97A"   # button hover/active
-WHITE = "#FDFBFF"        # history/entry background
-MUTED = "#8A7F99"        # mode label under Zyraena's messages
-MONO_FONT = "Consolas"
 
 MAX_TOOL_ROUNDS = 20
 CONFIRM_TIMEOUT_SECONDS = 300
@@ -89,7 +75,8 @@ _personality = _load_personality()
 MODE_COMMAND = "/mode"
 DEFAULT_ASSISTANT_PROMPT = (
     "You are a helpful, concise assistant. Answer clearly and accurately, "
-    "and reply in the language the user writes in."
+    "and reply in the language the user writes in. For WhatsApp use whatsapp_chats, whatsapp_messages "
+    "and send_whatsapp_file, which work through the WhatsApp Desktop app; never WhatsApp Web in the browser."
 )
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -119,49 +106,12 @@ _default_mode = os.environ.get("ZYRAENA_DEFAULT_MODE", "").strip().lower()
 if _default_mode not in MODES:
     _default_mode = "assistant"
 
-_state = {"root": None, "listener": None, "window": None, "chat": None, "log_path": None}
+_state = {"listener": None, "chat": None, "log_path": None}  # chat/log_path: the open text box
 _lock = threading.Lock()
-_avatar_cache = {}
-_language = i18n.DEFAULT_LANGUAGE
-
-
-def _load_avatar(filename, size=AVATAR_SIZE):
-    """Loads+resizes an avatar image once per (filename, size) and keeps it
-    cached (and referenced, so Tk doesn't garbage-collect it)."""
-    cache_key = (filename, size)
-    if cache_key in _avatar_cache:
-        return _avatar_cache[cache_key]
-
-    path = AVATAR_DIR / filename
-    photo = None
-    if path.exists():
-        try:
-            img = Image.open(path).convert("RGB").resize((size, size), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
-        except Exception as e:
-            print(i18n.get(_language, "avatar_load_failed", filename=filename, error=e))
-    _avatar_cache[cache_key] = photo
-    return photo
-
-
-def _draw_gradient(canvas, color_start, color_end):
-    canvas.delete("all")
-    width = canvas.winfo_width()
-    height = canvas.winfo_height()
-    if width <= 1:
-        return
-    r1, g1, b1 = canvas.winfo_rgb(color_start)
-    r2, g2, b2 = canvas.winfo_rgb(color_end)
-    steps = max(width // 4, 1)
-    for i in range(steps):
-        t = i / steps
-        r = int(r1 + (r2 - r1) * t) >> 8
-        g = int(g1 + (g2 - g1) * t) >> 8
-        b = int(b1 + (b2 - b1) * t) >> 8
-        color = f"#{r:02x}{g:02x}{b:02x}"
-        x0 = i * (width / steps)
-        x1 = (i + 1) * (width / steps)
-        canvas.create_rectangle(x0, 0, x1, height, outline="", fill=color)
+# The text box, yes/no box and the pet's lines (no window toggle any more): ZYRAENA_LANGUAGE, Turkish by default.
+_language = os.environ.get("ZYRAENA_LANGUAGE", "").strip().lower() or "tr"
+if _language not in i18n.STRINGS:
+    _language = i18n.DEFAULT_LANGUAGE
 
 
 def web_search(query: str) -> str:
@@ -174,6 +124,7 @@ def web_search(query: str) -> str:
     Args:
         query: The search query to look up on the web.
     """
+    credit_log.before_search()
     try:
         response = _tavily_client.search(query, max_results=5)
     except Exception as e:
@@ -265,7 +216,7 @@ TOOLS = [
     },
 ] + (pc_tools.TOOLS + browser_tools.TOOLS + system_tools.TOOLS + steam_tools.TOOLS
      + screen_tools.TOOLS + media_tools.TOOLS + reminder_tools.TOOLS + whatsapp_tools.TOOLS
-     + sleep_mode.TOOLS)
+     + web_control.TOOLS + sleep_mode.TOOLS)
 
 TOOL_FUNCTIONS = {
     "web_search": web_search,
@@ -278,44 +229,28 @@ TOOL_FUNCTIONS = {
     **media_tools.TOOL_FUNCTIONS,
     **reminder_tools.TOOL_FUNCTIONS,
     **whatsapp_tools.TOOL_FUNCTIONS,
+    **web_control.TOOL_FUNCTIONS,
     **sleep_mode.TOOL_FUNCTIONS,
 }
 
 
 def _ask_confirmation(key, **kwargs):
-    """Called from the worker thread by pc_tools before any change on the PC.
-    Shows a yes/no dialog on the Tk thread and blocks until it's answered."""
-    win = _state["window"]
-    if win is None:
-        return False
-
-    result = {"ok": False}
-    done = threading.Event()
-
-    def ask():
-        try:
-            result["ok"] = messagebox.askyesno(
-                i18n.get(_language, "confirm_title"), i18n.render(_language, key, **kwargs), parent=win,
-            )
-        finally:
-            done.set()
-
-    win.after(0, ask)
-    # If the window is closed before the dialog shows, the callback never runs; deny after a while.
-    done.wait(CONFIRM_TIMEOUT_SECONDS)
-    return result["ok"]
+    """Called from the worker thread by pc_tools before any change on the PC: a yes/no box in the
+    text box's neon look beside the pet; blocks until it's answered (no after CONFIRM_TIMEOUT_SECONDS)."""
+    return chat_box.confirm(i18n.get(_language, "confirm_title"), i18n.render(_language, key, **kwargs),
+                            i18n.get(_language, "confirm_yes"), i18n.get(_language, "confirm_no"),
+                            CONFIRM_TIMEOUT_SECONDS)
 
 
 pc_tools.confirm_handler = _ask_confirmation
 
 
 def _notify(key, **kwargs):
-    """Reports a finished background job started from the PC: in Zyraena's window if
-    it's open, otherwise wherever pc_tools.fallback_notify sends it (Telegram)."""
+    """Reports a finished background job started from the PC: in the text box if it's open,
+    otherwise wherever pc_tools.fallback_notify sends it (Telegram)."""
     text = i18n.render(_language, key, **kwargs)
-    win, append = _state["window"], _state.get("append")
-    if win is not None and append is not None:
-        win.after(0, append, AI_NAME, text, "ai_name", AI_AVATAR)
+    if chat_box.is_open():
+        chat_box.add(AI_NAME, text, "her")
     else:
         pc_tools.fallback_notify(text)
 
@@ -323,10 +258,11 @@ def _notify(key, **kwargs):
 pc_tools.notify_handler = _notify
 
 
-def answer_message(chat, text, language=None):
+def answer_message(chat, text, language=None, source="other"):
     """Like _send_message, but turns any failure into a user-facing message instead of raising.
     Also handles the /mode command, which switches the model this chat continues on.
-    `language` overrides the window's UI language for these messages (Telegram is always Turkish)."""
+    `language` overrides the window's UI language for these messages (Telegram is always Turkish).
+    `source` (box, telegram, voice) is where the request came from, for the credit log."""
     lang = language or _language
     if _is_mode_command(text):
         return _handle_mode_command(chat, text.strip()[len(MODE_COMMAND):].strip().lower(), lang)
@@ -335,7 +271,8 @@ def answer_message(chat, text, language=None):
     if not os.environ.get(mode["key_env"], "").strip():
         return i18n.get(lang, "invalid_api_key", provider=mode["provider"], env=mode["key_env"])
     try:
-        return _send_message(chat, text)
+        with credit_log.activity(source, text):
+            return _send_message(chat, text)
     except requests.exceptions.ConnectionError:
         return i18n.get(lang, "connection_error", provider=mode["provider"])
     except requests.exceptions.HTTPError as e:
@@ -408,6 +345,7 @@ def _openai_compat_request(mode, messages):
     )
     response.raise_for_status()
     data = response.json()
+    credit_log.record(mode["model"], data.get("usage"))
     message = data["choices"][0]["message"]
     tool_calls = message.get("tool_calls") or []
     for tc in tool_calls:
@@ -445,6 +383,7 @@ def _send_message(chat, user_text):
             images = []
             for tc in tool_calls:
                 fn_info = tc["function"]
+                credit_log.note_tool(fn_info["name"])
                 func = TOOL_FUNCTIONS.get(fn_info["name"])
                 try:
                     args = json.loads(fn_info.get("arguments") or "{}")
@@ -474,13 +413,13 @@ def _send_message(chat, user_text):
 _message_costs = deque(maxlen=50)  # cost of each recent user message, all tool rounds included
 
 
-def openrouter_balance():
+def openrouter_balance(timeout=10):
     """Remaining OpenRouter credit in USD, or None if it can't be read."""
     try:
         resp = requests.get(
             "https://openrouter.ai/api/v1/credits",
             headers={"Authorization": f"Bearer {os.environ.get(OPENROUTER_KEY_ENV, '').strip()}"},
-            timeout=10,
+            timeout=timeout,
         )
         resp.raise_for_status()
         data = resp.json()["data"]
@@ -536,14 +475,13 @@ def _get_tavily_credits():
         return ("error", None)
 
 
-def _render_credits(kind, data):
-    if kind == "ok":
-        return i18n.get(_language, "credits_format", remaining=data["remaining"], limit=data["limit"])
-    if kind == "unknown":
-        return i18n.get(_language, "credits_unknown")
-    if kind == "error":
-        return i18n.get(_language, "credits_failed")
-    return i18n.get(_language, "credits_loading")
+def _tavily_remaining():
+    kind, data = _get_tavily_credits()
+    return data["remaining"] if kind == "ok" else None
+
+
+# Before / after balances for the credit log; "before" holds the request up, so it gets a short timeout.
+credit_log.configure(balance=lambda: openrouter_balance(timeout=4), tavily=_tavily_remaining)
 
 
 def _new_log_path():
@@ -558,254 +496,102 @@ def _log_line(who, text):
         f.write(f"{who}: {text}\n")
 
 
-def _close_popup():
+def _box_open():
     with _lock:
-        win = _state["window"]
-        _state["window"] = None
+        _state["chat"] = new_chat()
+        _state["log_path"] = _new_log_path()
+    desktop_pet.activity("listen")
+
+
+def _box_close():
+    with _lock:
         _state["chat"] = None
         _state["log_path"] = None
-        recorder = _state.pop("recorder", None)
-    if recorder is not None:
-        recorder.stop()
-    if win is not None:
-        win.destroy()
+    import voice_session
+
+    if not voice_session.active():  # a spoken conversation keeps her busy
+        desktop_pet.activity(None)
 
 
-def _open_popup():
-    with _lock:
-        if _state["window"] is not None:
-            already_open = True
-        else:
-            already_open = False
-            win = tk.Toplevel(_state["root"])
-            _state["window"] = win
-            _state["chat"] = new_chat()
-            _state["log_path"] = _new_log_path()
-
-    if already_open:
-        _close_popup()
+def _box_send(text):
+    """Enter in the text box: Zyraena thinks (the pet too), then her answer shows in the box while the
+    pet talks for about as long as it takes to read. Silent: the owner chose text for the box."""
+    chat = _state["chat"]
+    if chat is None:
         return
+    chat_box.add(USER_NAME, text, "you")
+    _log_line(USER_NAME, text)
+    chat_box.thinking(True)
+    desktop_pet.activity("think")
 
-    win.title(i18n.get(_language, "window_title"))
-    win.geometry("640x760")
-    win.minsize(480, 460)
-    win.attributes("-topmost", True)
-    win.configure(bg=BG_COLOR)
+    def work():
+        answer = answer_message(chat, text, source="box")
+        _log_line(AI_NAME, answer)
+        chat_box.thinking(False)
+        chat_box.add(AI_NAME, answer, "her")
+        desktop_pet.activity("talk")
+        time.sleep(min(10.0, max(2.0, len(answer) / 18)))
+        if chat_box.is_open() and _state["chat"] is chat:
+            desktop_pet.activity("listen")
 
-    win.rowconfigure(2, weight=1)
-    win.rowconfigure(3, weight=0)
-    win.columnconfigure(0, weight=1)
+    threading.Thread(target=work, daemon=True).start()
 
-    header = tk.Frame(win, bg=BG_COLOR)
-    header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 2))
-    header.columnconfigure(0, weight=1)
-    header.columnconfigure(1, weight=0)
-    header.columnconfigure(2, weight=1)
 
-    ai_side = tk.Frame(header, bg=BG_COLOR)
-    ai_side.grid(row=0, column=0, sticky="w")
-    ai_header_avatar = _load_avatar(AI_AVATAR, HEADER_AVATAR_SIZE)
-    if ai_header_avatar is not None:
-        tk.Label(ai_side, image=ai_header_avatar, bg=BG_COLOR).pack()
-    tk.Label(ai_side, text=AI_NAME, bg=BG_COLOR, fg=GOLD, font=("Segoe UI", 12, "bold")).pack()
+def toggle_chat_box():
+    """Thread-safe: opens the text box beside the pet, or closes it (a click on her). A hidden pet
+    comes back first."""
+    if not desktop_pet.visible():
+        desktop_pet.toggle()
+    chat_box.toggle(_box_open, _box_send, _box_close, i18n.get(_language, "box_hint"),
+                    i18n.get(_language, "box_thinking"))
 
-    center = tk.Frame(header, bg=BG_COLOR)
-    center.grid(row=0, column=1, padx=12)
 
-    buttons_row = tk.Frame(center, bg=BG_COLOR)
-    buttons_row.pack()
-    mic_btn = tk.Button(
-        buttons_row, text="🎤", command=lambda: toggle_mic(), bg=BG_COLOR, fg=GOLD,
-        activebackground=BG_COLOR, activeforeground=GOLD_LIGHT, relief="flat",
-        font=("Segoe UI", 16), borderwidth=0, highlightthickness=1,
-        highlightbackground=GOLD,
-    )
-    mic_btn.pack(side="left")
-    lang_btn = tk.Button(
-        buttons_row, text=i18n.get(_language, "lang_toggle"), command=lambda: toggle_language(),
-        bg=BG_COLOR, fg=GOLD, activebackground=BG_COLOR, activeforeground=GOLD_LIGHT,
-        relief="flat", font=("Segoe UI", 10, "bold"), borderwidth=0, highlightthickness=1,
-        highlightbackground=GOLD, padx=6,
-    )
-    lang_btn.pack(side="left", padx=(6, 0))
+def toggle_panel():
+    """Thread-safe: opens the panel in the middle of the screen (Ctrl+F1), or closes it: show/hide the
+    pet, the live OpenRouter and Tavily credits, the API credit log and the Disk tab."""
+    control_panel.toggle(_language, desktop_pet.visible, desktop_pet.toggle, openrouter_balance,
+                         _get_tavily_credits, disk_watch, credit_log)
 
-    credits_var = tk.StringVar(value=i18n.get(_language, "credits_loading"))
-    tk.Label(center, textvariable=credits_var, bg=BG_COLOR, fg=GOLD_LIGHT, font=(MONO_FONT, 7)).pack(pady=(4, 0))
-    openrouter_var = tk.StringVar(value="OpenRouter: …")
-    tk.Label(center, textvariable=openrouter_var, bg=BG_COLOR, fg=GOLD_LIGHT, font=(MONO_FONT, 7)).pack()
 
-    user_side = tk.Frame(header, bg=BG_COLOR)
-    user_side.grid(row=0, column=2, sticky="e")
-    user_header_avatar = _load_avatar(USER_AVATAR, HEADER_AVATAR_SIZE)
-    if user_header_avatar is not None:
-        tk.Label(user_side, image=user_header_avatar, bg=BG_COLOR).pack()
-    tk.Label(user_side, text=USER_NAME, bg=BG_COLOR, fg=PURPLE, font=("Segoe UI", 12, "bold")).pack()
+def open_disk_panel():
+    """Thread-safe: the panel on its Disk tab (a click on the pet's "Disk: new findings" bubble)."""
+    control_panel.show("disk", _language, desktop_pet.visible, desktop_pet.toggle, openrouter_balance,
+                       _get_tavily_credits, disk_watch, credit_log)
 
-    def load_credits():
-        kind, data = _get_tavily_credits()
-        _state["credits"] = (kind, data)
-        win.after(0, credits_var.set, _render_credits(kind, data))
-        balance = openrouter_balance()
-        win.after(0, openrouter_var.set, f"OpenRouter: ${balance:.2f}" if balance is not None else "OpenRouter: ?")
 
-    threading.Thread(target=load_credits, daemon=True).start()
+def ask_flash(prompt, what=""):
+    """One question to the assistant mode's model (Gemini Flash) with no tools and no history; returns
+    the answer's text. The disk scanner uses it for folders no rule knows (disk_memory.describe)."""
+    mode = MODES["assistant"]
+    key = os.environ.get(mode["key_env"], "").strip()
+    if not key:
+        raise RuntimeError(f"{mode['key_env']} is not set")
 
-    gradient = tk.Canvas(win, height=3, highlightthickness=0, bg=BG_COLOR)
-    gradient.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
-    gradient.bind("<Configure>", lambda e: _draw_gradient(gradient, GOLD, PURPLE))
+    def request():
+        response = requests.post(mode["url"], headers={"Authorization": f"Bearer {key}", "X-Title": "Zyraena"},
+                                 json={"model": mode["model"], "messages": [{"role": "user", "content": prompt}],
+                                       "usage": {"include": True}}, timeout=90)
+        response.raise_for_status()
+        return response.json()
 
-    history = tk.Text(
-        win, state="disabled", wrap="word", bg=WHITE, fg=PURPLE,
-        insertbackground=PURPLE, relief="flat", padx=10, pady=10,
-        font=(MONO_FONT, 10), borderwidth=0, highlightthickness=2,
-        highlightbackground=GOLD, highlightcolor=GOLD,
-    )
-    history.tag_config("user_name", foreground=PURPLE, font=("Segoe UI", 10, "bold"))
-    history.tag_config("ai_name", foreground=GOLD_TEXT, font=("Segoe UI", 10, "bold"))
-    history.tag_config("mode_label", foreground=MUTED, font=("Segoe UI", 8, "italic"))
-    history.grid(row=2, column=0, sticky="nsew", padx=10, pady=4)
-
-    input_frame = tk.Frame(win, bg=BG_COLOR)
-    input_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=(4, 10))
-    input_frame.columnconfigure(0, weight=1)
-
-    entry = tk.Entry(
-        input_frame, bg=WHITE, fg=PURPLE, insertbackground=PURPLE,
-        relief="flat", font=(MONO_FONT, 10), highlightthickness=2,
-        highlightbackground=GOLD, highlightcolor=GOLD,
-    )
-    entry.grid(row=0, column=0, sticky="ew", ipady=4)
-
-    def append_history(who, text, tag, avatar_file, mode=None):
-        history.config(state="normal")
-        avatar = _load_avatar(avatar_file)
-        if avatar is not None:
-            history.image_create("end", image=avatar)
-            history.insert("end", " ")
-        history.insert("end", f"{who}: ", tag)
-        history.insert("end", f"{text}\n")
-        if mode:
-            history.insert("end", f"({mode})\n", "mode_label")
-        history.insert("end", "\n")
-        history.config(state="disabled")
-        history.see("end")
-        _log_line(who, text)
-
-    _state["append"] = append_history
-    append_history(AI_NAME, i18n.get(_language, "greeting", user=USER_NAME), "ai_name", AI_AVATAR, _state["chat"]["mode"])
-
-    def on_send(event=None):
-        message = entry.get().strip()
-        if not message:
-            return
-        entry.delete(0, "end")
-        append_history(USER_NAME, message, "user_name", USER_AVATAR)
-
-        chat = _state["chat"]
-        threading.Thread(target=respond, args=(chat, message, False), daemon=True).start()
-
-    def respond(chat, message, speak):
-        """Worker thread: answers, shows the answer, and reads it aloud if the user spoke (🎤)."""
-        answer = answer_message(chat, message + voice.SPOKEN_HINT if speak else message)
-        win.after(0, append_history, AI_NAME, answer, "ai_name", AI_AVATAR, chat["mode"])
-        if speak:
-            try:
-                spoken = voice.synthesize(answer)
-                if spoken is not None:
-                    voice.play(spoken[0])
-            except Exception as e:
-                win.after(0, append_history, AI_NAME, i18n.get(_language, "voice_reply_failed", error=e),
-                          "ai_name", AI_AVATAR)
-
-    def toggle_mic():
-        """First press starts recording, second press stops it and sends what was said."""
-        recorder = _state.pop("recorder", None)
-        if recorder is None:
-            voice.stop_playing()
-            try:
-                _state["recorder"] = voice.Recorder()
-            except Exception as e:
-                append_history(AI_NAME, i18n.get(_language, "mic_failed", error=e), "ai_name", AI_AVATAR)
-                return
-            voice.warm_up()
-            mic_btn.config(text="⏹", fg=PURPLE)
-            return
-        mic_btn.config(text="🎤", fg=GOLD)
-        audio = recorder.stop()
-        chat = _state["chat"]
-
-        def hear():
-            try:
-                text = voice.transcribe(audio, MODES["assistant"]["model"]) if audio else ""
-            except Exception as e:
-                text, error = "", e
-            else:
-                error = None
-            if not text:
-                message = i18n.get(_language, "mic_failed", error=error) if error else i18n.get(_language, "voice_not_understood")
-                win.after(0, append_history, AI_NAME, message, "ai_name", AI_AVATAR)
-                return
-            win.after(0, append_history, USER_NAME, f"🎤 {text}", "user_name", USER_AVATAR)
-            respond(chat, text, True)
-
-        threading.Thread(target=hear, daemon=True).start()
-
-    send_btn = tk.Button(
-        input_frame, text=i18n.get(_language, "send_button"), command=on_send, bg=GOLD, fg=BG_COLOR,
-        activebackground=GOLD_LIGHT, relief="flat", font=("Segoe UI", 9, "bold"),
-        borderwidth=0, padx=10,
-    )
-    send_btn.grid(row=0, column=1, padx=(6, 0))
-    entry.bind("<Return>", on_send)
-
-    def toggle_language():
-        global _language
-        _language = "tr" if _language == "en" else "en"
-        win.title(i18n.get(_language, "window_title"))
-        send_btn.config(text=i18n.get(_language, "send_button"))
-        lang_btn.config(text=i18n.get(_language, "lang_toggle"))
-        credits_var.set(_render_credits(*_state.get("credits", ("loading", None))))
-
-    win.bind("<Escape>", lambda event: _close_popup())
-    win.protocol("WM_DELETE_WINDOW", _close_popup)
-
-    # A Toplevel created from a background-thread mainloop (triggered by a
-    # global hook) can render blank on Windows until it's forced to repaint
-    # and take focus.
-    win.update_idletasks()
-    win.deiconify()
-    win.lift()
-    win.attributes("-topmost", True)
-    win.focus_force()
-    entry.focus_set()
+    with credit_log.activity("disk", what):
+        data = _call_with_retry(request)
+        credit_log.record(mode["model"], data.get("usage"))
+    return data["choices"][0]["message"].get("content") or ""
 
 
 HOTKEY = "<ctrl>+<f1>"
 
 
-def _on_hotkey():
-    if _state["root"] is not None:
-        _state["root"].after(0, _open_popup)
+def current_language():
+    return _language
 
 
 def start_ai_assistant():
-    """Starts the global Ctrl+F1 hotkey listener and this module's own Tk UI thread."""
+    """Starts the global Ctrl+F1 hotkey (the panel)."""
     if _state["listener"] is not None:
         return  # already running
-
-    ready = threading.Event()
-
-    def ui_thread():
-        root = tk.Tk()
-        root.withdraw()
-        _state["root"] = root
-        ready.set()
-        root.mainloop()
-
-    threading.Thread(target=ui_thread, daemon=True).start()
-    ready.wait()
-
-    listener = keyboard.GlobalHotKeys({HOTKEY: _on_hotkey})
+    listener = keyboard.GlobalHotKeys({HOTKEY: toggle_panel})
     listener.daemon = True
     listener.start()
     _state["listener"] = listener
@@ -816,8 +602,3 @@ def stop_ai_assistant():
     if listener is not None:
         listener.stop()
         _state["listener"] = None
-
-    root = _state["root"]
-    if root is not None:
-        root.after(0, root.quit)
-        _state["root"] = None

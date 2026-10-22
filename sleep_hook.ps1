@@ -3,7 +3,9 @@
 # Runs before every tool call that can change files. It works out which project folders
 # under the sleep-mode roots (Documents\Projects, Documents\Work) the call may touch, and
 # copies each one into the night's Failsafe folder the first time, before anything in it
-# changes. If a copy fails, the call is blocked (exit 2): nothing changes without a backup.
+# changes. A file outside the roots is copied on its own before Edit/Write changes it. If a copy
+# fails, the call is blocked (exit 2): nothing changes without a backup. (sleep_mode.py normally
+# copies every project at the start; this catches what that couldn't.)
 param(
     [Parameter(Mandatory)][string]$Failsafe,
     [Parameter(Mandatory)][string]$Roots,  # separated by ;
@@ -72,6 +74,29 @@ foreach ($candidate in $candidates) {
             Add-Content -LiteralPath (Join-Path $Failsafe 'backed_up.txt') -Value "$source|$target" -Encoding UTF8
         }
         # A folder that doesn't exist yet is being created: there's nothing to back up.
+    }
+    # A file outside the roots (e.g. an installed app's config) that Edit/Write is about to change:
+    # copy that one file, into a folder of its own so the report can compare and clean it up alone.
+    # The folder is named by a hash of the path (the path itself could pass Windows' 260-character
+    # limit); backed_up.txt and the report keep the real path.
+    if ($call.tool_name -notin 'Bash', 'PowerShell' -and (Test-Path -LiteralPath $full -PathType Leaf)) {
+        $outside = $true
+        foreach ($root in @($rootList) + [IO.Path]::GetFullPath($Failsafe).TrimEnd('\')) {
+            if ($full.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { $outside = $false }
+        }
+        $md5 = [Security.Cryptography.MD5]::Create()
+        $hash = -join ($md5.ComputeHash([Text.Encoding]::UTF8.GetBytes($full.ToLowerInvariant()))[0..3] |
+            ForEach-Object { $_.ToString('x2') })
+        $target = Join-Path $Failsafe ("Outside\${hash}_" + (Split-Path $full -Leaf))
+        if ($outside -and -not (Test-Path -LiteralPath (Join-Path $target (Split-Path $full -Leaf)))) {
+            try {
+                New-Item -ItemType Directory -Path $target -Force | Out-Null
+                Copy-Item -LiteralPath $full -Destination $target
+                Add-Content -LiteralPath (Join-Path $Failsafe 'backed_up.txt') -Value "$full|$target" -Encoding UTF8
+            } catch {
+                $problems += "$full ($($_.Exception.Message))"
+            }
+        }
     }
 }
 

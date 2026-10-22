@@ -9,6 +9,7 @@ Background jobs (script runs, scheduled shutdowns) report back later through
 the notify handler of the channel they were started from.
 """
 import difflib
+import fnmatch
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import subprocess
 import threading
 import time
 import unicodedata
+import uuid
 import winreg
 from contextlib import contextmanager
 from itertools import count
@@ -128,6 +130,64 @@ def _run(fn):
 
 def _declined():
     return "The user declined this action. Don't retry it unless they ask again."
+
+
+# Files that never leave the PC (WhatsApp, uploads to a site), whatever folder they're in.
+SECRET_NAMES = (".env", ".env.*", "*.pem", "*.key", "*.pfx", "*.p12", "*.ppk", "*.kdbx", "*.kdb",
+                "id_rsa*", "id_ed25519*", "id_ecdsa*", "credentials*", "*.ovpn")
+SECRET_FOLDERS = {".ssh", ".gnupg", ".aws", ".azure", ".claude", ".state", "claude_communication_wichelberg"}
+
+
+def _shareable_file(path):
+    """A file that may be sent off the PC: inside the allowed folders and not a secret."""
+    file = _resolve(path, allow_root=False)
+    if not file.is_file():
+        raise ToolError(f"Not a file: {file}")
+    name = file.name.lower()
+    if any(fnmatch.fnmatch(name, pattern) for pattern in SECRET_NAMES) or \
+            any(part.lower() in SECRET_FOLDERS for part in file.parts):
+        raise ToolError(f"Refusing to send {file.name}: it looks like a secret (keys, passwords, tokens).")
+    return file
+
+
+ASK_TIMEOUT_SECONDS = 10 * 60
+
+
+def ask_everywhere(key, **kwargs):
+    """Asks on the PC (popup) and on Telegram at once; the first answer counts, none in
+    10 minutes is a no. For the owner's "ask before every step, reading included" tools
+    (web control, reading WhatsApp)."""
+    import alert  # imported here: telegram_listener imports ai_assistant, which imports this module
+    import i18n
+    import telegram_listener
+
+    language = telegram_listener.LANGUAGE
+    text = "🔐 " + i18n.get(language, key, **kwargs)
+    yes, no = i18n.get(language, "confirm_yes"), i18n.get(language, "confirm_no")
+    token = f"ask-{uuid.uuid4().hex[:8]}"
+    on_pc = {}
+    answered = threading.Event()
+
+    def choose(index):
+        on_pc["ok"] = index == 0
+        answered.set()
+
+    alert.show_choice(token, text, None, [yes, no], choose, title=i18n.get(language, "confirm_title"),
+                      close_choice=1)
+    remote = telegram_listener.send_alert(text, yes, no)
+    try:
+        deadline = time.monotonic() + ASK_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if answered.wait(0.25):
+                if remote is not None:
+                    telegram_listener.send_alert(i18n.get(language, "answered_on_pc", answer=yes if on_pc["ok"] else no))
+                return on_pc["ok"]
+            if remote is not None and remote["event"].is_set():
+                return remote["ok"]
+        return False
+    finally:
+        telegram_listener.forget_alert(remote)
+        alert.close(token)
 
 
 def list_directory(path: str) -> str:
