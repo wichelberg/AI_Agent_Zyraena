@@ -66,7 +66,7 @@ class StillClock(user_care.FakeClock):
 
 # The rule tests below were written with these numbers; the shipped defaults (rougher, owner 2026-10-24)
 # are pinned in StateAndConfigTest.test_rough_default_points.
-TEST_MOOD = {"drift_per_hour": 2,
+TEST_MOOD = {"start": 50, "drift_per_hour": 2,
              "points": {"break": 5, "snooze": -5, "unanswered": -10, "forced_done": 10, "emergency_exit": -20,
                         "water": 5, "water_later": 0, "sleep_warning": -10, "on_time_bed": 20, "peace": 10,
                         "shutdown_cancel": -20}}
@@ -139,7 +139,7 @@ class MoodTest(unittest.TestCase):
 
 class BreakTest(unittest.TestCase):
     def test_prompt_after_an_hour_of_use(self):
-        sim = Sim()
+        sim = Sim(cfg={"water": {"every_minutes": 600}})
         sim.run(59)
         self.assertIsNone(sim.ui.last("prompt"))
         sim.run(1)
@@ -294,9 +294,11 @@ class AwayTest(unittest.TestCase):
 
 
 class WaterTest(unittest.TestCase):
-    def test_water_every_hour_and_drinking_gives_5(self):
+    def test_water_every_20_minutes_and_drinking_gives_5(self):
         sim = Sim(cfg={"break": {"every_minutes": 600}})
-        sim.run(60)
+        sim.run(19)
+        self.assertFalse(sim.prompts("water"))
+        sim.run(1)
         name, args, _ = sim.ui.last("prompt")
         self.assertEqual(args[0], "water")
         sim.care.answer_water("drank")
@@ -304,7 +306,7 @@ class WaterTest(unittest.TestCase):
 
     def test_later_comes_back_in_15_minutes(self):
         sim = Sim(cfg={"break": {"every_minutes": 600}})
-        sim.run(60)
+        sim.run(20)
         sim.care.answer_water("later")
         sim.run(14)
         self.assertEqual(len(sim.ui.kinds("prompt")), 1)
@@ -549,12 +551,19 @@ class StateAndConfigTest(unittest.TestCase):
         mood = user_care.DEFAULTS["mood"]
         self.assertEqual(mood["snoozes"], {"happy": 2, "normal": 1, "angry": 0})
         self.assertEqual((mood["points"]["snooze"], mood["points"]["water"], mood["drift_per_hour"]), (-15, 1, 1))
-        sim = Sim(mood=50, cfg={"mood": user_care.DEFAULTS["mood"]})
+        self.assertEqual((mood["start"], user_care.DEFAULTS["water"]["every_minutes"]), (25, 20))
+        sim = Sim(mood=50, cfg={"mood": user_care.DEFAULTS["mood"], "water": {"every_minutes": 600}})
         sim.run(60)
         sim.answer("snooze")
-        self.assertEqual(round(sim.mood()), 35)
+        self.assertEqual(round(sim.mood()), 34)  # 50, -1 drifting toward 25 in that hour, -15
         sim.care._water_later(sim.clock.now())
-        self.assertEqual(round(sim.mood()), 32)
+        self.assertEqual(round(sim.mood()), 31)
+
+    def test_mood_drifts_back_to_its_start(self):
+        sim = Sim(mood=41, cfg={"mood": {"start": 25}, "break": {"every_minutes": 600},
+                                "water": {"every_minutes": 600}})
+        sim.run(120)
+        self.assertEqual(sim.mood(), 37)  # -2 an hour toward 25
 
     def test_toned_lines_are_one_variant_with_the_name(self):
         sim = Sim(mood=50)

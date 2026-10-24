@@ -33,7 +33,7 @@
             "afk_break_minutes": 10
         },
         "water": {
-            "every_minutes": 60,
+            "every_minutes": 20,
             "later_minutes": 15,
             "answer_minutes": 5
         },
@@ -52,7 +52,7 @@
             "final_seconds": 60
         },
         "mood": {
-            "start": 50,
+            "start": 25,
             "happy_from": 70,
             "angry_to": 30,
             "drift_per_hour": 1,

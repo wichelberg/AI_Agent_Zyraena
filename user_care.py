@@ -49,12 +49,12 @@ DEFAULTS = {
     "sleep_gap_seconds": 120,  # two checks this far apart: the PC slept
     "break": {"every_minutes": 60, "answer_minutes": 5, "normal_minutes": 10, "forced_minutes": 10,
               "forced_warning_minutes": 2, "afk_break_minutes": 10},
-    "water": {"every_minutes": 60, "later_minutes": 15, "answer_minutes": 5},
+    "water": {"every_minutes": 20, "later_minutes": 15, "answer_minutes": 5},
     "night": {"start_hour": 0, "end_hour": 6, "check_hour": 3, "answer_minutes": 10, "excuses_per_week": 2,
               "bedtime_gap_hours": 4, "bedtime_from_hour": 22},
     "shutdown": {"warning_minutes": 5, "angry_warning_minutes": 2, "final_seconds": 60},
     # Rough on purpose (owner, 2026-10-24): good habits barely lift her mood, slips cost a lot.
-    "mood": {"start": 50, "happy_from": 70, "angry_to": 30, "drift_per_hour": 1,
+    "mood": {"start": 25, "happy_from": 70, "angry_to": 30, "drift_per_hour": 1,
              "snoozes": {"happy": 2, "normal": 1, "angry": 0},
              "points": {"break": 2, "snooze": -15, "unanswered": -20, "forced_done": 5, "emergency_exit": -30,
                         "water": 1, "water_later": -3, "sleep_warning": -15, "on_time_bed": 10, "peace": 5,
@@ -510,10 +510,10 @@ class Care:
             self._dirty = False
 
     def _drift(self, seconds):
-        """The mood goes back toward 50 by drift_per_hour."""
-        mood = self.state["mood"]
+        """The mood goes back toward mood.start by drift_per_hour."""
+        mood, base = self.state["mood"], self.cfg["mood"]["start"]
         step = self.cfg["mood"]["drift_per_hour"] * seconds / 3600
-        self.state["mood"] = mood + math.copysign(min(step, abs(50 - mood)), 50 - mood) if mood != 50 else mood
+        self.state["mood"] = mood + math.copysign(min(step, abs(base - mood)), base - mood) if mood != base else mood
 
     def _reset_cycle(self, close_prompts=False):
         self.state.update(active=0.0, cycle=0.0, snoozes=0)
