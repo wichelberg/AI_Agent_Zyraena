@@ -18,5 +18,119 @@
             "end_date": { "year": null, "month": null, "day": null, "hour": null, "minute": null },
             "sound": "sounds/alert.mp3"
         }
-    ]
+    ],
+    "user_care": {
+        "enabled": true,
+        "dry_run": true,
+        "afk_minutes": 5,
+        "sleep_gap_seconds": 120,
+        "break": {
+            "every_minutes": 60,
+            "answer_minutes": 5,
+            "normal_minutes": 10,
+            "forced_minutes": 10,
+            "forced_warning_minutes": 2,
+            "afk_break_minutes": 10
+        },
+        "water": {
+            "every_minutes": 60,
+            "later_minutes": 15,
+            "answer_minutes": 5
+        },
+        "night": {
+            "start_hour": 0,
+            "end_hour": 6,
+            "check_hour": 3,
+            "answer_minutes": 10,
+            "excuses_per_week": 2,
+            "bedtime_gap_hours": 4,
+            "bedtime_from_hour": 22
+        },
+        "shutdown": {
+            "warning_minutes": 5,
+            "angry_warning_minutes": 2,
+            "final_seconds": 60
+        },
+        "mood": {
+            "start": 50,
+            "happy_from": 70,
+            "angry_to": 30,
+            "drift_per_hour": 1,
+            "snoozes": {
+                "happy": 2,
+                "normal": 1,
+                "angry": 0
+            },
+            "points": {
+                "break": 2,
+                "snooze": -15,
+                "unanswered": -20,
+                "forced_done": 5,
+                "emergency_exit": -30,
+                "water": 1,
+                "water_later": -3,
+                "sleep_warning": -15,
+                "on_time_bed": 10,
+                "peace": 5,
+                "shutdown_cancel": -30
+            }
+        },
+        "peace": {
+            "min_hours": 2,
+            "per_day": 2
+        },
+        "protect": {
+            "programs": [
+                "claude.exe",
+                "blender.exe",
+                "Unity.exe",
+                "VideoEditorPlus.exe",
+                "rsession.exe",
+                "yt-dlp.exe"
+            ],
+            "gpu": {
+                "enabled": true,
+                "percent": 80,
+                "minutes": 3,
+                "compute_percent": 20
+            },
+            "terminal_jobs": {
+                "enabled": true,
+                "cpu_percent": 25,
+                "minutes": 3
+            },
+            "training": {
+                "enabled": true,
+                "patterns": [
+                    "Wichelberg_VoiceChanger\\data\\egitim",
+                    "RNNModel",
+                    "Voice_Changer_Production",
+                    "train_stt.py"
+                ]
+            },
+            "zyraena_runs": {
+                "enabled": true
+            },
+            "busy_cpu": {
+                "enabled": true,
+                "percent": 40,
+                "minutes": 5
+            },
+            "downloads": {
+                "enabled": true,
+                "mb_per_second": 5,
+                "minutes": 3,
+                "folder": "~/Downloads"
+            }
+        },
+        "debug": {
+            "enabled": false,
+            "at": "",
+            "active_minutes": 0,
+            "mood": null,
+            "speed": 1,
+            "telegram": false,
+            "keep": false
+        }
+    }
 }

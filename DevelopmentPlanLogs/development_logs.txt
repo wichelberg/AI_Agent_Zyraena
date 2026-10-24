@@ -153,3 +153,107 @@ Dikkat edilecekler:
   karşılaştırması), boyut, son kullanım tarihi; birleştirme yerine "hangisi kullanılıyor"
   bilgisiyle öneri.
 - Büyük önbellekler: pip, HuggingFace, torch, npm, Blender, PyInstaller build/dist, Temp.
+
+----------------------------------------------------------------------------
+5) User Care: mola, su, uyku ve Zyraena'nın mood'u
+   Eklendi: 2026-10-24 · Durum: BİTTİ (2026-10-24, kaynakta; exe'ye kurulmadı, DRY_RUN açık)
+----------------------------------------------------------------------------
+Kişiliğin üstünde bir mood katmanı (ayrı kişilik değil). Ayarların hepsi config.json "user_care".
+- Dosyalar: user_care.py (kurallar, mood, durum, debug saati), care_guard.py (koruma listesi),
+  care_windows.py (uyarılar, mola penceresi, tam ekran zorunlu mola / son 60 sn), care_panel.py
+  (Ctrl+F1 > Bakım sekmesi + "Koruma ayarları…" penceresi). ai_assistant: mood bloğu sadece lady
+  moduna her mesajda eklenir; care_make_peace aracı (özür/söz +10, 2 saatte bir, günde 2); sohbet
+  kutusunu Zyraena'nın mesajıyla açma (03:00, sabah özeti); 03:00 cevabı Gemini Flash ile sınıflanır.
+  system_tools.cancel_hooks: Telegram /iptal User Care'in kapatmasını da durdurur.
+- Kararlar (sahiple, 2026-10-24): mood sadece lady'de, varsayılan mod assistant kalır; koruma sadece
+  User Care'in kapatmasını engeller (uyku modu ve elle istenen kapatma aynen); GPU kuralı = %80 VE yük
+  compute/cuda motorunda (oyun 3d'de, sayılmaz); kuralların hepsi açık: programlar (claude, blender,
+  Unity, Movavi VideoEditorPlus, rsession, yt-dlp), terminal işi, eğitim projeleri, Zyraena'nın
+  script'leri, yoğun CPU, indirmeler. Bakım sekmesinden canlı açılıp kapanır.
+- Benim boşluk kararlarım: cevapsız uyarı sadece kullanıcı PC'yi kullanırken -10 (uzaktaysa ceza yok,
+  10 dk olunca mola sayılır); "Mola ver" tıklanınca +5, 10 dk geri sayım, bitince Telegram; su "Sonra"
+  15 dk; "uyuyamıyorum" gecesi uyarılar devam eder ama cezasız; 03:00'te 10 aktif dk cevap yoksa keyfi;
+  haftalık sayaç pazartesi sıfırlanır; yatış = 22:00 sonrası başlayan en az 4 saatlik girdi boşluğu.
+- Uyku tespiti: iki kontrol arasında 120 sn+ zaman atlaması (Modern Standby'da süreç donuyor);
+  donmazsa zaten girdi olmadığı için AFK yolundan mola sayılıyor.
+- Debug: py -3 user_care.py --debug --at 02:58 --active 178 --mood 25 --speed 30 (ayrı durum dosyası,
+  her seferinde temiz, asla kapatmaz, Telegram'sız). Bakım sekmesinde saat/AFK/uyku/mood butonları.
+- Doğrulama: tests	est_user_care.py (51 test, sahte saat). Gerçek modellerle uçtan uca debug koşusu:
+  03:00 sorusu kişilikle geldi, "dizi izliyorum" keyfi sınıflandı, kademeli kapatma DRY_RUN ile sonuna
+  kadar gitti, pencereden sebepli iptal -20 ile kaydedildi; claude.exe çalışırken kapatma yerine zorunlu
+  mola geldi.
+
+Kalanlar:
+- Kurulum: exe yeniden derlenmedi (build.ps1) ve Apps\Zyraena'ya kurulmadı.
+- DRY_RUN açık; gerçek kapatma için config.json'da "dry_run": false (sahip söyleyince).
+- Tam ekran zorunlu mola exclusive-fullscreen oyunların altında kalabilir (borderless'ta üstte).
+- Tüm test takımı tek süreçte koşunca "Tcl_AsyncDelete" ile çöküyor; bu HEAD'de de var (benden önce),
+  dosya dosya koşunca geçiyor.
+
+=== 2026-10-24 (uyku modu) Pet: mood'a göre animasyonlar ===
+Aşama 1 (A: sinirli + motor + testler) BİTTİ:
+- Yeni sprite'lar (eskilerine dokunulmadı, --only ile ayrı klasörler): angry_in (20, takipli, sağ bot
+  sabit), angry_idle (50 pingpong: geniş duruş, yumruklar belde, dirsekler dışarı, çene yukarı, ağır nefes,
+  ışık x1.35 ve yarım döngüde 3 nabız), angry_talkin (10) + angry_talk (30: işaret parmağı havada, döngüde
+  iki kez sana doğru vurgu), angry_sitdown (20) + angry_sit (50 pingpong: tahtın sağ köşesine yaslanmış,
+  bacaklar açık ve öne uzanmış, yumruk çenede, sol el kol dayanağında parmakları serçeden işarete tıkırdatır).
+- Pozlar sayısal çözüldü (koordinat inişi): eller bel kenarına (bel genişliği ölçülerek), tabanlar düz
+  (eğim < 1 mm), taht kutularıyla gövde noktaları çakışma sayımı. Taht çakışması sadece oturakta 2.7 cm
+  (mevcut sit ile aynı, kalça sıkışması); mevcut sit'te önkollar dayanağa 6 cm gömülü, yenide 0.
+- zyraena_real.py: apply_pose'a "LX/LY/LZ" (kemiğin kendi ekseninde dönüş; parmak bükümü el nasıl
+  tutulursa tutulsun doğru), above_floor() (oturma geçişinde bot zemine girmesin: mevcut sitdown'da
+  14.7 cm giriyordu, yenilerde 0), TRACK_FOOT (geçişte basan ayak sabit: iki ayak yerdeyken temas
+  ayağı değişip bot kayıyordu), mouth() (konuşma ağız/kafa ortak).
+- desktop_pet.py: ENTRIES/POSE_OF poz ağacı + _bridge: iki poz arası yol otomatik oynar (sinirli
+  duruştan yürümeye, oturmaya, başka poza geçerken önce duruştan çıkar). Mood user_care.service().tone()
+  ile 5 sn'de bir, lazy import (User Care yoksa eski davranış). Seviye değişince dururken/otururken
+  (_settle_mood) geçiş oynar; tahttaysa kalkıp yeni tarzda oturur. Kare yoksa MOOD_FALLBACK ile eskiye
+  düşer. angry_talk döngüsünü bitirip eli indirir (FINISH_LOOPS). MOOD_PASTIMES (sinirli: hançer/dambıl
+  x2, esneme x0.3). Testler: tests/test_pet_mood.py (12), test_pet_motion (7) geçiyor.
+Aşama 2 (C: ekstralar) BİTTİ:
+- impatientin (14, takipli) + impatient (40 döngü): kollar kavuşuk, çene yukarı, sol bot yarım döngüde dört
+  kez burnunu kaldırıp yere vurur (bot eğimi fazladan ayak dönüşünden geri alınır). Motor: POSES'a
+  "impatient"; User Care olay listesinde yeni bir snooze/unanswered (2 dk içinde) görünce, dururken/
+  otururken/bir pozdayken kalkıp bu poza geçer ve pet_lines_impatient'tan bir laf eder (i18n TR/EN);
+  yürüyorsa durana kadar bekler (en çok 2 dk).
+- worried_in (14, takipli) + worried (40 pingpong): kollar kendine sarılı (eller karşı bel yanlarında,
+  önkollar göğüs altında çaprazlanır), baş eğik, ışık x0.45. tone()=="worried" (gece, düşük mood). Kendi
+  talk'u yok (aynı pozda kalır), tahtta normal_sit'e düşer.
+- angry_in yeniden render: adım büyütüldü (bot 5 cm kalkıyor), iz sağ bota sabit; iz artık tekdüze
+  (önce 10-14. karelerde 12 px geri dönüyordu = bot kayması).
+- PASTIMES ağırlıkları (render yok) Aşama 1'de motorla birlikte yapıldı.
+Aşama 3 (B: normal) BİTTİ:
+- normal_in (20, takipli, sağ bot sabit, iz 0 -> 14.8 px tekdüze), normal_idle (50 pingpong: dik, ayaklar
+  yakın, eller arkada kenetli, çene hafif yukarı, ışık x0.85), normal_talk (30: aynı duruşta ağız/kafa;
+  ilk karesi normal_idle'ın ilk karesiyle aynı nefeste), normal_sitdown (20) + normal_sit (50 pingpong:
+  resmi, dik sırt (taht arkasıyla çakışma 0), iki önkol dayanaklarda, dizler bitişik, bacaklar eğik
+  zemine; tabanlar z 0.000).
+- Önce/sonra görseli: idle / angry_idle / normal_idle ve sit / angry_sit / normal_sit yan yana.
+Aşama 4 (derleme + kurulum) BİTTİ (05:02):
+- build.ps1 -> dist\Zyraena.exe (250 MB; önceki 183 MB, yeni ~478 kare). Eski exe:
+  Apps\Zyraena\Zyraena_before_mood_anims_2026-10-24.exe; eski sprite'lar + orijinal betik/parametreler:
+  pet\backup_before_mood_anims_2026-10-24.
+- Yeni exe başlatıldı: pet penceresi açık, Apps\Zyraena\config.json'da user_care bölümü oluştu (dry_run
+  true), Care state.json yazıldı. Mood 50 (normal) iken pet canlıda resmi tahta oturuşa (normal_sit) geçti.
+- Tüm test dosyaları tek tek OK (22 dosya; test_pet_mood 12, test_pet_motion 7, test_user_care 52).
+Kalanlar / not:
+- Sinirli/endişeli/sabırsız canlıda görülmedi (mood şu an 50); Ctrl+F1 > Bakım'daki mood butonlarıyla ya
+  da debug komutuyla denenebilir.
+- Mevcut sitdown'da bot geçiş sırasında 14.7 cm zemine giriyor (dokunmama kararı yüzünden düzeltilmedi;
+  yenilerde above_floor ile 0). İstenirse sitdown yalnız --only sitdown ile yeniden render edilir.
+
+=== 2026-10-24 09:30 Mood puanları sertleşti + replikler mood'a göre ===
+- Puanlar (user_care DEFAULTS, config.example.json, kurulu Apps\Zyraena\config.json): erteleme -15 (önce -5),
+  cevapsız -20, mola +2, su +1, su "sonra" -3 (yeni), zorunlu mola bitti +5, acil çıkış -30, uyku uyarısı -15,
+  zamanında yatış +10, barışma +5, kapatma iptali -30, geri dönüş saatte 1. Erteleme hakkı: mutlu 2, normal 1,
+  sinirli 0 (zaten böyleydi). Kural testleri eski sabit sayılarla (TEST_MOOD), yeni varsayılanlar ayrı testte.
+- Replikler (i18n.py, MOOD_LINES): pet lafları pet_lines[_poz]_mood (mutlu: sahiplenici/anaç, "canım",
+  "good boy"; normal: nötr, hafif dominant, {user} ile isimle, emir veren; sinirli: öfkeli, sadist,
+  cezalandırmayı seven, aşırı dominant/sahiplenici; gece endişeli). Her mood'da eskinin 2 katı (genel 16, kod
+  12, izleme 8, diğerleri 6). User Care mesajları her ton için 2 varyant, rastgele seçiliyor (toned()).
+  "küçük olan" hiçbir yerde yok (personality.md'de de yasak). Lady modunun ton tarifi i18n.PERSONA_TONES.
+  {user} = ZYRAENA_USER_NAME, yoksa i18n.USER_FALLBACK.
+- GitHub: i18n.example.py (aynı anahtarlar, yumuşak örnek satırlar) commit'lenecek; i18n.py .gitignore'da.
+  README kurulumuna "copy i18n.example.py i18n.py" eklendi. i18n.py daha önce takip edildiği için bir kez
+  `git rm --cached i18n.py` gerekiyor (git işlerini sahibi yapıyor).
+- Kurulum 09:30: eski exe Zyraena_before_mood_lines_2026-10-24.exe. Testler dosya dosya OK.

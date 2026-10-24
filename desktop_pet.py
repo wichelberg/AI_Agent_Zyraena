@@ -83,7 +83,7 @@ DEFAULT_HOLD = 2
 ARRIVE_CYCLES = 2
 STRIDE_LIMITS = (0.8, 1.25)
 # Poses she holds for a while, each entered by playing "<pose>in" and left by playing it backwards.
-POSES = ("code", "watch", "lift", "stretch", "dagger")
+POSES = ("code", "watch", "lift", "stretch", "dagger", "impatient")
 DEFAULT_HEIGHT = 351  # 340 before the high platform boots: her body keeps its size, the boots add to it
 # Used only without meta.json: one 60-frame walk cycle covers ~1.44 m, seen at 55 degrees.
 WALK_SPEED_PER_HEIGHT = 1.44 * 0.82 / 2.5 / 60
@@ -103,12 +103,37 @@ HISTORY_SIZE = 30  # recent states kept for pet_log.txt
 LOG_MAX_BYTES = 200_000
 LOG_REPEAT_SECONDS = 60  # the same problem is logged at most once a minute
 POSE_SECONDS = {"code": (40, 90),  # while coding: how often she thinks about saying something or a break
-                "watch": (10, 25), "lift": (6, 12), "stretch": (4, 7), "dagger": (5, 9)}
+                "watch": (10, 25), "lift": (6, 12), "stretch": (4, 7), "dagger": (5, 9),
+                "impatient": (20, 35)}  # after a snoozed or unanswered break (User Care)
 # What she picks to do next, by what's open on her monitor (whatever is left over: walk on).
 # On the bare desktop these only come up when she doesn't go back to the throne (SIT_CHANCE).
 PASTIMES = {"browse": {"watch": 0.45, "lift": 0.15, "dagger": 0.15, "stretch": 0.1},
             "app": {"watch": 0.25, "lift": 0.2, "dagger": 0.2, "stretch": 0.1},
             "desktop": {"dagger": 0.3, "stretch": 0.2, "lift": 0.15}}
+# Her mood from User Care (user_care.py: tone() is happy/normal/angry, or worried instead of angry at
+# night). Happy is how she always was; the others stand, talk and sit their own way. A mood without frames
+# for something falls back along MOOD_FALLBACK, then to the plain animation.
+MOOD_ANIMS = {"angry": {"idle": "angry_idle", "talk": "angry_talk", "sit": "angry_sit"},
+              "normal": {"idle": "normal_idle", "talk": "normal_talk", "sit": "normal_sit"},
+              "worried": {"idle": "worried", "talk": "worried"}}
+MOOD_FALLBACK = {"worried": "normal"}
+MOOD_CHECK_TICKS = 250  # how often (5 s) she looks at her mood
+# Pastime odds by mood, times PASTIMES (angry: more dagger and dumbbell, hardly any stretching).
+MOOD_PASTIMES = {"angry": {"dagger": 2.0, "lift": 2.0, "stretch": 0.3, "watch": 0.8},
+                 "normal": {"stretch": 0.7},
+                 "worried": {"lift": 0.5, "dagger": 0.5}}
+IMPATIENT_WINDOW = 120  # s: a snoozed or unanswered break older than this doesn't make her impatient
+# What her body is doing, as a tree: each pose is entered from its parent by playing its entry animation
+# (backwards to leave it). Moving between any two poses plays the way through the tree (see _bridge), so
+# a mood's stance is left before she sits down, walks off or takes another pose. Loops not named here
+# are their own pose; "walk" is entered by the turns.
+ENTRIES = {"angry": ("angry_in", "stand"), "angry_talk": ("angry_talkin", "angry"),
+           "normal": ("normal_in", "stand"), "worried": ("worried_in", "stand"),
+           "sit": ("sitdown", "stand"), "angry_sit": ("angry_sitdown", "stand"),
+           "normal_sit": ("normal_sitdown", "stand"), "lean": ("leanin", "stand"), "think": ("thinkin", "stand")}
+POSE_OF = {"idle": "stand", "talk": "stand", "angry_idle": "angry", "normal_idle": "normal",
+           "normal_talk": "normal", "drag": None}
+FINISH_LOOPS = ("angry_talk",)  # left only at the end of a loop (the arm back where the entry has it)
 CODE_BREAK_CHANCE = 0.25  # now and then she stops typing to stretch, then gets back to work
 SHORT_WALK_SECONDS = (1.5, 3)  # a few steps to face the middle of the screen before watching it
 MIN_COVER = 0.15  # a window counts as open on her monitor when it covers this much of it
@@ -486,6 +511,8 @@ class Pet:
         self.then = None  # a pose to take at the end of the current walk (see _walk_on)
         self.context = _screen_context(self.hwnd)  # what's open on her monitor (see _screen_context)
         self.pending, self.pending_hits = self.context, 0
+        self.pose = None  # she appears in her first pose (no way into it)
+        self.mood, self.last_nag = self._read_mood()
         if self.throne_win is not None and self.context == "desktop":  # she starts on her throne
             self.x = self._throne_x()
             self._set_state("sit", SIT_SECONDS, "sit", 1)
@@ -560,7 +587,7 @@ class Pet:
         elif self.state == "sit":
             if context != "desktop":
                 self._hide_bubble()
-                self._play("sitdown", 1, reversed(range(len(self.anims["sitdown"][1]))))
+                self._get_up()
                 self.facing = 1
                 self._decide()
         elif self.state == "to_throne" and context != "desktop":
@@ -582,7 +609,7 @@ class Pet:
         if self.throne_win is None:
             return
         wanted = not self.game and (self.context == "desktop" or self.state == "sit"
-                                    or any(entry[0] == "sitdown" for entry in self.queue))
+                                    or any(entry[0].endswith("sitdown") for entry in self.queue))
         changed = wanted != self.throne_shown
         self.throne_shown = wanted
         if changed and not wanted:
@@ -602,9 +629,9 @@ class Pet:
         self._hide_bubble()
         self.game = monitor
         self._click_through(True)
-        self.queue.clear()
+        self._clear_queue()
         if self.state == "sit":
-            self._play("sitdown", 1, reversed(range(len(self.anims["sitdown"][1]))))
+            self._get_up()
         elif self.state in POSES:
             self._leave_pose()
         left, _, right, bottom = monitor
@@ -625,7 +652,7 @@ class Pet:
         was_leaning = self.state == "lean"
         self.game = None
         self._click_through(False)
-        self.queue.clear()
+        self._clear_queue()
         _, _, right, bottom = _work_area()
         self.y = bottom - self.h
         self.x = min(self.x, right - self.w)  # back inside the work area
@@ -656,10 +683,157 @@ class Pet:
 
     def _play(self, anim, facing, indexes, shown=None):
         """Queues frames of anim; shown is the frame of it already on screen (where the first one's
-        move is counted from, see _shift)."""
+        move is counted from, see _shift). If her body isn't in the pose they start from, the way there
+        is queued first (_bridge)."""
         indexes = list(indexes)
         if indexes:
+            start, end = self._ends(anim, indexes)
+            self._bridge(start, facing)
             self.queue.append([anim, facing, indexes, shown])
+            self.pose, self.pose_facing = end, facing
+
+    # --- Poses and moods ----------------------------------------------------------------
+
+    # Defaults for a Pet made without __init__ (the tests).
+    mood = None  # User Care's tone (see MOOD_ANIMS); None: happy, or no User Care
+    pose, pose_facing = "stand", 1  # where the queued frames leave her body (see ENTRIES); None: anywhere
+    last_nag, nag_until = None, None
+
+    @staticmethod
+    def _pose_of(anim):
+        return POSE_OF.get(anim, anim)
+
+    @staticmethod
+    def _entry(pose):
+        """(entry animation, parent pose) of a pose, or None for "stand", "walk" and loose loops."""
+        return ENTRIES.get(pose) or ((pose + "in", "stand") if pose in POSES else None)
+
+    def _ends(self, anim, indexes):
+        """The poses frames of anim start and end in (an entry played backwards leaves its pose)."""
+        if anim in TURNS:
+            ends = ("walk", "stand")
+        else:
+            pose = anim[:-2] if anim.endswith("in") and anim[:-2] in POSES else next(
+                (name for name, (entry, _) in ENTRIES.items() if entry == anim), None)
+            if pose is None:
+                pose = self._pose_of(anim)
+                return pose, pose
+            ends = (self._entry(pose)[1], pose)
+        return ends if indexes[-1] >= indexes[0] else ends[::-1]
+
+    def _path(self, pose):
+        """The poses from "stand" down to pose, or None if there's no way (walk, missing frames)."""
+        path = [pose]
+        while path[-1] != "stand":
+            entry = self._entry(path[-1])
+            if entry is None or entry[0] not in self.anims:
+                return None
+            path.append(entry[1])
+        return path[::-1]
+
+    def _bridge(self, target, facing):
+        """Queues the way from the pose her body is in to target: back up the tree (entries played
+        backwards), then down to target. Nothing if either is loose (None) or has no way."""
+        here = self.pose
+        if here is None or target is None or here == target:
+            return
+        up, down = self._path(here), self._path(target)
+        if up is None or down is None:
+            return
+        k = 0
+        while k < min(len(up), len(down)) and up[k] == down[k]:
+            k += 1
+        if up[k:] and self.anim in FINISH_LOOPS and self._pose_of(self.anim) == here and not self.queue:
+            n = len(self.anims[self.anim][1])  # the arm comes back down before the way out
+            self.queue.append([self.anim, self.pose_facing, list(range(self.index % n + 1, n)), self.index % n])
+        for pose in reversed(up[k:]):
+            anim = self._entry(pose)[0]
+            n = len(self.anims[anim][1])
+            self.queue.append([anim, self.pose_facing, list(range(n - 2, -1, -1)), n - 1])
+        for pose in down[k:]:
+            anim = self._entry(pose)[0]
+            self.queue.append([anim, facing, list(range(1, len(self.anims[anim][1]))), 0])
+        self.queue = [entry for entry in self.queue if entry[2]]
+        self.pose, self.pose_facing = target, facing
+
+    def _get_up(self):
+        """Off the throne (whichever way she sits), standing facing you."""
+        self._bridge("stand", 1)
+
+    def _clear_queue(self):
+        """Drops the queued frames: her body is taken as in the current state's pose (she jumps there)."""
+        self.queue.clear()
+        self.pose, self.pose_facing = self._pose_of(self.anim), self.facing
+
+    def _moody(self, anim):
+        """The animation she plays for anim (idle, talk, sit) in her mood."""
+        mood = self.mood
+        while mood:
+            name = MOOD_ANIMS.get(mood, {}).get(anim)
+            if name in self.anims and self._path(self._pose_of(name)) is not None:
+                return name
+            mood = MOOD_FALLBACK.get(mood)
+        return anim
+
+    def _read_mood(self):
+        """(tone, time of the latest snoozed or unanswered break) from User Care; (None, None) without it.
+        Imported here: the pet runs without User Care too."""
+        try:
+            import user_care
+            care = user_care.service()
+            if care is None:
+                return None, None
+            tone = care.tone()
+            nag = next((e.get("t") for e in reversed(list(care.state.get("recent") or ()))
+                        if e.get("kind") in ("snooze", "unanswered")), None)
+        except Exception as e:  # User Care is optional: she just stays as she is
+            self._report(f"mood: {e!r}")
+            return None, None
+        return (None if tone == "happy" else tone), nag
+
+    def _check_mood(self):
+        mood, nag = self._read_mood()
+        self.mood = mood
+        if nag and nag != self.last_nag:
+            self.last_nag = nag
+            try:
+                fresh = abs((datetime.now() - datetime.fromisoformat(nag)).total_seconds()) < IMPATIENT_WINDOW
+            except (TypeError, ValueError):
+                fresh = False
+            if fresh:
+                self.nag_until = time.monotonic() + IMPATIENT_WINDOW
+        if self.nag_until is not None:
+            if time.monotonic() > self.nag_until or self._impatient():
+                self.nag_until = None
+        self._settle_mood()
+
+    def _impatient(self):
+        """Arms crossed, tapping her foot, after a snoozed or unanswered break. Returns False to try again
+        later (walking, busy), True once done (or impossible)."""
+        if "impatient" not in self.anims or "impatientin" not in self.anims or self.state == "impatient":
+            return True
+        if self.game or self.hidden or self.queue or self.state not in ("idle", "talk", "sit") + POSES \
+                or self.state == "code":
+            return False
+        facing = 1 if self.state == "sit" else self.facing
+        if self.state in POSES:
+            self._leave_pose()
+        self._hide_bubble()
+        self._take_pose("impatient", facing)
+        self.say(random.choice(self._lines("impatient")))
+        return True
+
+    def _settle_mood(self):
+        """Shows a change of mood in a quiet moment, standing around or on the throne (otherwise the next
+        state picks it up)."""
+        if self.queue or self.bubble is not None or self.state not in ("idle", "sit") or \
+                self.state_ticks < MOOD_CHECK_TICKS:
+            return
+        plain = "idle" if self.state == "idle" else "sit"
+        if self.anim != self._moody(plain):
+            ticks = self.state_ticks
+            self._set_state(self.state, (1, 1), plain, self.facing)
+            self.state_ticks = ticks
 
     def _shift(self, anim, facing, index, before):
         """Moves her window as a queued frame comes up: a walk frame by one stride, a tracked transition
@@ -710,6 +884,8 @@ class Pet:
                 self._check_window()
             if self.tick % GAME_CHECK_TICKS == 0:
                 self._check_screen()
+            if self.tick % MOOD_CHECK_TICKS == 0:
+                self._check_mood()
             self._step()
             self._sync_throne()
             if self.throne_shown:
@@ -766,8 +942,8 @@ class Pet:
             left, _, right, bottom = self._area()
             self.x = (left + right - self.w) / 2 if rect is None else max(left, min(self.x, right - self.w))
             self.y = bottom - self.h
-            self.queue.clear()
-            self._set_state("idle", (1, 2), "idle", self.facing)
+            self._clear_queue()
+            self._set_state("idle", (1, 2), "idle", self.facing, mood=False)
         user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
         user32.SetWindowPos(self.hwnd, wintypes.HWND(HWND_TOPMOST), 0, 0, 0, 0,
                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
@@ -832,8 +1008,7 @@ class Pet:
                 if self.state == "to_work":
                     self._take_pose("code", self.dir)
                 else:
-                    self._play("sitdown", 1, range(len(self.anims["sitdown"][1])))
-                    self._set_state("sit", SIT_SECONDS, "sit", 1)
+                    self._set_state("sit", SIT_SECONDS, "sit", 1)  # sits down (see _bridge)
             else:
                 self.x += self.dir * self.speed
         elif self.state == "walk":
@@ -850,7 +1025,7 @@ class Pet:
                 if self.bubble is None and random.random() < TALK_CHANCE:
                     self.say(random.choice(self._lines()))
             else:
-                self._play("sitdown", 1, reversed(range(len(self.anims["sitdown"][1]))))
+                self._get_up()
                 self._pastime()
         elif self.state in ("idle", "talk") and self.state_ticks <= 0:
             if self.state == "idle" and self.bubble is None and random.random() < TALK_CHANCE:
@@ -858,7 +1033,15 @@ class Pet:
             else:
                 self._decide()
 
-    def _set_state(self, state, seconds, anim, facing):
+    def _set_state(self, state, seconds, anim, facing, mood=True):
+        """mood: idle, talk and sit go by her mood (False for a moment's idle between two things: no
+        stance for a second or two)."""
+        if mood:
+            anim = self._moody(anim)
+        pose = self._pose_of(anim)
+        if self.pose is not None:  # the way into this loop's pose, if her body isn't there yet
+            self._bridge(pose, facing)
+        self.pose, self.pose_facing = pose, facing
         self.state, self.state_ticks = state, self._ticks(seconds)
         self.anim, self.facing, self.index = anim, facing, 0
         self.history.append(f"{datetime.now():%H:%M:%S} {state} x={getattr(self, 'x', '?')} "
@@ -942,11 +1125,12 @@ class Pet:
 
     def _stop_and_face(self):
         self._stop(self._landings()[0])
-        # Coming from the left, the mirrored frames keep the hand on the same hip as the turn.
-        self._set_state("idle", IDLE_SECONDS, "idle", self.dir)
         then, self.then = self.then, None
-        if then and self.state == "idle" and self.context != "code":
+        if then and self.context != "code":  # straight into the pose (no mood stance on the way)
+            self.facing = self.dir
             self._take_pose(then, self._inward() if then == "watch" else self.dir)
+        else:  # coming from the left, the mirrored frames keep the hand on the same hip as the turn
+            self._set_state("idle", IDLE_SECONDS, "idle", self.dir)
 
     def _decide(self):
         """What next after standing around, by what is open on her monitor: with an editor
@@ -960,8 +1144,7 @@ class Pet:
                 self.dir = 1 if self._throne_x() > self.x else -1
                 if self._close_to(self._throne_x()):  # standing in front of it already: sits right down
                     self.x = self._throne_x()
-                    self._play("sitdown", 1, range(len(self.anims["sitdown"][1])))
-                    self._set_state("sit", SIT_SECONDS, "sit", 1)
+                    self._set_state("sit", SIT_SECONDS, "sit", 1)  # sits down (see _bridge)
                 else:
                     self._start_walk("to_throne", (600, 600))
             else:
@@ -975,7 +1158,7 @@ class Pet:
         Watching needs her facing the middle (the "watchin" frames start from that idle pose),
         so otherwise she first takes a few steps toward the nearer edge, which ends facing it."""
         roll = random.random()
-        for pose, chance in PASTIMES.get(self.context, {}).items():
+        for pose, chance in self._pastimes().items():
             if roll >= chance:
                 roll -= chance
                 continue
@@ -993,6 +1176,16 @@ class Pet:
                 self._take_pose(pose, self.facing)
             return
         self._walk_on()
+
+    def _pastimes(self):
+        """PASTIMES for what's open, weighted by her mood (MOOD_PASTIMES); some chance of walking on is
+        always left."""
+        chances = {pose: chance * MOOD_PASTIMES.get(self.mood, {}).get(pose, 1.0)
+                   for pose, chance in PASTIMES.get(self.context, {}).items()}
+        total = sum(chances.values())
+        if total > 0.9:
+            chances = {pose: chance * 0.9 / total for pose, chance in chances.items()}
+        return chances
 
     def _inward(self):
         """Facing that turns the code and watch poses toward the middle of the screen: they are
@@ -1028,7 +1221,7 @@ class Pet:
         pose = self.state
         last = len(self.anims[pose + "in"][1]) - 1
         self._play(pose + "in", self.facing, range(last - 1, -1, -1), shown=last)
-        self._set_state("idle", (1, 2), "idle", self.facing)
+        self._set_state("idle", (1, 2), "idle", self.facing, mood=False)
 
     def _walk_on(self, direction=None, seconds=WALK_SECONDS, then=None):
         """Walks off (direction if there's room that way, else wherever there's room); then is
@@ -1045,8 +1238,18 @@ class Pet:
         self._start_walk("walk", seconds)
 
     def _lines(self, kind=None):
-        key = f"pet_lines_{kind}" if kind else "pet_lines"
-        return [line for line in i18n.get(self.language(), key).split("\n") if line.strip()]
+        """Her lines for kind (a pose, or None) in her mood: pet_lines[_<kind>]_<mood>, a mood without its own
+        falling back along MOOD_FALLBACK, then to happy; {user} is the owner's name."""
+        lang = self.language()
+        base = f"pet_lines_{kind}" if kind else "pet_lines"
+        tables = (i18n.STRINGS.get(lang, {}), i18n.STRINGS[i18n.DEFAULT_LANGUAGE])
+        mood, key = self.mood or "happy", None
+        while mood and key is None:
+            if any(f"{base}_{mood}" in table for table in tables):
+                key = f"{base}_{mood}"
+            mood = MOOD_FALLBACK.get(mood) or ("happy" if mood != "happy" else None)
+        text = i18n.get(lang, key or base, user=i18n.user_name())
+        return [line for line in text.split("\n") if line.strip()]
 
     # --- Speech -------------------------------------------------------------------------
 
@@ -1115,7 +1318,7 @@ class Pet:
         if self.state != "busy":
             self._hide_bubble()
             if self.state == "sit":
-                self._play("sitdown", 1, reversed(range(len(self.anims["sitdown"][1]))))
+                self._get_up()
                 facing = 1
             elif self.state in POSES:
                 self._leave_pose()
@@ -1125,7 +1328,7 @@ class Pet:
         anim = self.ACTIVITY_ANIMS.get(kind, "idle")
         if anim not in self.anims:  # "think" until its frames are rendered
             anim = "idle"
-        if self.state == "busy" and self.anim == anim:
+        if self.state == "busy" and self.anim == self._moody(anim):
             return
         if "thinkin" in self.anims:  # the hand goes to her chin, and back down after
             frames = range(len(self.anims["thinkin"][1]))
@@ -1152,7 +1355,7 @@ class Pet:
             return
         if not dragging:
             self._hide_bubble()
-            self.queue.clear()
+            self._clear_queue()
             self._set_state("drag", (1, 1), "drag", 1)
         self.drag_from = (x0, y0, px, py, True)
         self.x, self.y = px + event.x_root - x0, py + event.y_root - y0

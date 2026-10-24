@@ -105,6 +105,10 @@ def main():
     web_control.watch(notify=_extension_problem, lang=ai_assistant.current_language)
     disk_watch.configure(ask=ai_assistant.ask_flash, notify=_disk_findings, lang=ai_assistant.current_language)
     disk_watch.start()
+    try:
+        ai_assistant.start_user_care(notify=lambda text: pc_tools.fallback_notify(text))  # after Telegram
+    except Exception as e:  # breaks and reminders must not take the app down
+        print(f"User care couldn't start: {e!r}")
 
     root = tk.Tk()
     root.withdraw()

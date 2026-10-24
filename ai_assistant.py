@@ -27,6 +27,7 @@ import screen_tools
 import sleep_mode
 import steam_tools
 import system_tools
+import user_care
 import web_control
 import whatsapp_tools
 
@@ -231,6 +232,7 @@ TOOL_FUNCTIONS = {
     **whatsapp_tools.TOOL_FUNCTIONS,
     **web_control.TOOL_FUNCTIONS,
     **sleep_mode.TOOL_FUNCTIONS,
+    **user_care.TOOL_FUNCTIONS,
 }
 
 
@@ -323,7 +325,13 @@ def _handle_mode_command(chat, name, lang):
 def _system_prompt(mode):
     now = datetime.now()
     clock = f"Current local date and time: {now:%Y-%m-%d %H:%M} ({now:%A})."
-    return f"{mode['system']}\n\n{clock}" if mode["system"] else clock
+    text = f"{mode['system']}\n\n{clock}" if mode["system"] else clock
+    care = user_care.prompt_block() if mode is MODES["lady"] else ""  # the mood is the persona's, not the assistant's
+    return f"{text}\n\n{care}" if care else text
+
+
+def _tools(mode):
+    return TOOLS + user_care.TOOLS if mode is MODES["lady"] else TOOLS
 
 
 def _openai_compat_request(mode, messages):
@@ -338,7 +346,7 @@ def _openai_compat_request(mode, messages):
         json={
             "model": mode["model"],
             "messages": [{"role": "system", "content": _system_prompt(mode)}] + messages,
-            "tools": TOOLS,
+            "tools": _tools(mode),
             "usage": {"include": True},  # OpenRouter reports the request's cost
         },
         timeout=60,
@@ -525,6 +533,7 @@ def _box_send(text):
     desktop_pet.activity("think")
 
     def work():
+        user_care.box_message(text)  # the answer to her 03:00 question, if she asked one
         answer = answer_message(chat, text, source="box")
         _log_line(AI_NAME, answer)
         chat_box.thinking(False)
@@ -546,22 +555,48 @@ def toggle_chat_box():
                     i18n.get(_language, "box_thinking"))
 
 
+def say_in_box(text):
+    """Thread-safe: Zyraena starts the conversation herself (User Care: the 03:00 question, the morning
+    summary): the text box opens (unless it's open) with her line, and the chat goes on from it."""
+    if not chat_box.is_open():
+        toggle_chat_box()
+
+    def add():
+        chat = _state["chat"]
+        if chat is not None:
+            # A user turn first: some providers don't take a conversation that starts with the assistant.
+            chat["messages"] += [{"role": "user", "content": "[Zyraena opened the chat herself.]"},
+                                 {"role": "assistant", "content": text}]
+            _log_line(AI_NAME, text)
+        chat_box.add(AI_NAME, text, "her")
+        desktop_pet.activity("talk")
+
+    chat_box.post(add)
+
+
 def toggle_panel():
     """Thread-safe: opens the panel in the middle of the screen (Ctrl+F1), or closes it: show/hide the
-    pet, the live OpenRouter and Tavily credits, the API credit log and the Disk tab."""
+    pet, the live OpenRouter and Tavily credits, the API credit log, the Disk tab and the Care tab."""
     control_panel.toggle(_language, desktop_pet.visible, desktop_pet.toggle, openrouter_balance,
-                         _get_tavily_credits, disk_watch, credit_log)
+                         _get_tavily_credits, disk_watch, credit_log, user_care.service())
 
 
 def open_disk_panel():
     """Thread-safe: the panel on its Disk tab (a click on the pet's "Disk: new findings" bubble)."""
     control_panel.show("disk", _language, desktop_pet.visible, desktop_pet.toggle, openrouter_balance,
-                       _get_tavily_credits, disk_watch, credit_log)
+                       _get_tavily_credits, disk_watch, credit_log, user_care.service())
 
 
-def ask_flash(prompt, what=""):
+def open_care_panel():
+    """Thread-safe: the panel on its Care tab (User Care's debug run opens it at start)."""
+    control_panel.show("care", _language, desktop_pet.visible, desktop_pet.toggle, openrouter_balance,
+                       _get_tavily_credits, disk_watch, credit_log, user_care.service())
+
+
+def ask_flash(prompt, what="", source="disk"):
     """One question to the assistant mode's model (Gemini Flash) with no tools and no history; returns
-    the answer's text. The disk scanner uses it for folders no rule knows (disk_memory.describe)."""
+    the answer's text. The disk scanner uses it for folders no rule knows (disk_memory.describe), User
+    Care to sort the owner's answer at 03:00."""
     mode = MODES["assistant"]
     key = os.environ.get(mode["key_env"], "").strip()
     if not key:
@@ -574,10 +609,43 @@ def ask_flash(prompt, what=""):
         response.raise_for_status()
         return response.json()
 
-    with credit_log.activity("disk", what):
+    with credit_log.activity(source, what):
         data = _call_with_retry(request)
         credit_log.record(mode["model"], data.get("usage"))
     return data["choices"][0]["message"].get("content") or ""
+
+
+def ask_persona(instruction, what=""):
+    """One message in Zyraena's own voice (lady mode: her persona and User Care's mood) with no tools and no
+    history, for what User Care says by itself (break over on Telegram, the 03:00 question, the morning
+    summary). Returns the text."""
+    mode = MODES["lady"]
+    key = os.environ.get(mode["key_env"], "").strip()
+    if not key:
+        raise RuntimeError(f"{mode['key_env']} is not set")
+    language = "Turkish" if _language == "tr" else "English"
+
+    def request():
+        response = requests.post(mode["url"], headers={"Authorization": f"Bearer {key}", "X-Title": "Zyraena"},
+                                 json={"model": mode["model"],
+                                       "messages": [{"role": "system", "content": _system_prompt(mode)},
+                                                    {"role": "user", "content": f"[User Care, not from the user] "
+                                                                                f"{instruction} Write in {language}; "
+                                                                                "only the message itself."}],
+                                       "usage": {"include": True}}, timeout=60)
+        response.raise_for_status()
+        return response.json()
+
+    with credit_log.activity("care", what):
+        data = _call_with_retry(request)
+        credit_log.record(mode["model"], data.get("usage"))
+    return data["choices"][0]["message"].get("content") or ""
+
+
+def start_user_care(notify, debug=None):
+    """Starts User Care (user_care.py) with Zyraena's voice, the text box and `notify` (Telegram)."""
+    return user_care.start(persona=ask_persona, classify=lambda prompt, what: ask_flash(prompt, what, "care"),
+                           notify=notify, chat=say_in_box, lang=current_language, debug=debug)
 
 
 HOTKEY = "<ctrl>+<f1>"

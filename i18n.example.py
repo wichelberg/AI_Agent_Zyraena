@@ -1,37 +1,12 @@
 """UI text for Zyraena's popup, in English (default) and Turkish."""
 
+import os
+
 DEFAULT_LANGUAGE = "en"
 
 STRINGS = {
     "en": {
         "greeting": "*looks down at you* {user}... Zyraena is listening. What do you need?",
-        "pet_lines": "*tilts her head down at you* Buried in the screen again, little one.\n"
-                     "This city's lights remind me of the Underdark's fungus forests. Less poisonous, that's all.\n"
-                     "*crosses her arms* Click me if you need something. Or don't. I'm watching anyway.\n"
-                     "Take a break. Your eyes look redder than mine.\n"
-                     "*the light lines on her suit pulse slowly* I'm bored. Entertain me, surface dweller.\n"
-                     "The taskbar is my runway. Keep it clean where I walk.\n"
-                     "Did you drink water? Even drow drink water.\n"
-                     "*flicks her hair over her shoulder* What are you staring at? You're right to admire.",
-        "pet_lines_code": "*her fingers dance over the keys of light* Keep up, little one. I'm already two functions ahead.\n"
-                          "That variable name... in the Underdark we executed people for less.\n"
-                          "*glances at your screen* Did you test that, or are we praying to Lolth again?\n"
-                          "Commit early, surface dweller. Regret is slower than a crash.\n"
-                          "*the hologram flickers in her eyes* Clean. Almost worthy of a drow.\n"
-                          "Read the error message. It is talking to you, just like me.",
-        "pet_lines_watch": "*crosses her arms* Interesting. Not you, the screen.\n"
-                           "*tilts her head* This is what surface dwellers do all day?\n"
-                           "Scroll slower. I read faster than you, but not that fast.\n"
-                           "*the light lines on her suit flare* Close that tab. I don't like it.",
-        "pet_lines_lift": "*curls the dumbbell without effort* This is light. Want to try?\n"
-                          "*smirks, showing her arm* Stare all you want. It's earned.\n"
-                          "Strength isn't a hobby in the Underdark, little one. It's survival.",
-        "pet_lines_dagger": "*spins the dagger in her palm* Relax. If I wanted you hurt, you wouldn't have seen it.\n"
-                            "*admires the blade* Drow steel. It remembers every throat it met.\n"
-                            "A drow without a blade is just a tall elf with opinions.",
-        "pet_lines_stretch": "*stretches, the suit's light lines rippling* Sitting is a surface habit. A bad one.\n"
-                             "*laces her fingers behind her head* You should stretch too. You look like a question mark.\n"
-                             "Break's over when I say it's over.",
         "pet_menu_chat": "Open chat",
         "pet_menu_talk": "Say something",
         "pet_menu_hide": "Hide",
@@ -198,33 +173,6 @@ STRINGS = {
     },
     "tr": {
         "greeting": "*başını eğerek sana bakar* {user}... Zyraena seni dinliyor. Ne istiyorsun?",
-        "pet_lines": "*başını eğerek sana bakar* Yine ekrana gömülmüşsün, küçük olan.\n"
-                     "Bu şehrin ışıkları Underdark'ın mantar ormanlarını hatırlatıyor. Daha az zehirli, o kadar.\n"
-                     "*kollarını kavuşturur* Bir şeye ihtiyacın olursa bana tıkla. Ya da tıklama. Nasılsa izliyorum.\n"
-                     "Biraz ara ver. Gözlerin benimkinden kızarmış görünüyor.\n"
-                     "*takımındaki ışık hatları yavaşça nabız atar* Sıkıldım. Eğlendir beni, yüzey sakini.\n"
-                     "Görev çubuğun benim podyumum. Bastığım yer temiz olsun.\n"
-                     "Su içtin mi? Drow'lar bile su içer.\n"
-                     "*saçlarını omzundan geriye atar* Ne bakıyorsun? Hayran olmakta haklısın.",
-        "pet_lines_code": "*parmakları ışıktan tuşların üzerinde dans eder* Yetiş bana, küçük olan. Ben iki fonksiyon öndeyim.\n"
-                          "O değişken adı... Underdark'ta bundan azı için idam ederdik.\n"
-                          "*ekranına göz atar* Bunu test ettin mi, yoksa yine Lolth'a mı dua ediyoruz?\n"
-                          "Erken commit at, yüzey sakini. Pişmanlık, çökmeden daha yavaş gelir.\n"
-                          "*hologram gözlerinde titreşir* Temiz. Neredeyse bir drow'a layık.\n"
-                          "Hata mesajını oku. Seninle konuşuyor, tıpkı benim gibi.",
-        "pet_lines_watch": "*kollarını kavuşturur* İlginç. Sen değil, ekran.\n"
-                           "*başını yana eğer* Yüzey sakinleri bütün gün bunu mu yapıyor?\n"
-                           "Daha yavaş kaydır. Senden hızlı okurum ama o kadar da değil.\n"
-                           "*takımındaki ışık hatları parlar* Kapat o sekmeyi. Hoşuma gitmedi.",
-        "pet_lines_lift": "*dambılı zahmetsizce kaldırır* Bu hafif. Denemek ister misin?\n"
-                          "*sırıtarak kolunu gösterir* İstediğin kadar bak. Hak edilmiş bir şey bu.\n"
-                          "Underdark'ta güç bir hobi değildir, küçük olan. Hayatta kalmaktır.",
-        "pet_lines_dagger": "*hançeri avucunda çevirir* Rahat ol. Canını yakmak isteseydim, görmezdin bile.\n"
-                            "*bıçağı inceler* Drow çeliği. Tanıştığı her boğazı hatırlar.\n"
-                            "Hançersiz bir drow, sadece fikirleri olan uzun bir elftir.",
-        "pet_lines_stretch": "*gerinir, takımındaki ışık hatları dalgalanır* Oturmak bir yüzey alışkanlığı. Kötü bir alışkanlık.\n"
-                             "*parmaklarını başının arkasında kenetler* Sen de esne. Soru işaretine benziyorsun.\n"
-                             "Mola, ben bitti deyince biter.",
         "pet_menu_chat": "Sohbeti aç",
         "pet_menu_talk": "Bir şey söyle",
         "pet_menu_hide": "Gizle",
@@ -783,6 +731,637 @@ STRINGS["tr"].update({
                           "Sadece JSON ile cevap ver: [{{\"id\": sayı, \"what\": metin, \"redownloadable\": true ya "
                           "da false}}] biçiminde bir liste.\n\n{items}",
 })
+
+
+# User Care (user_care, care_windows) and the panel's Care tab (care_panel). Texts ending in _happy /
+# _normal / _angry / _worried follow her mood (worried: an angry mood late at night).
+STRINGS["en"].update({
+    "credits_source_care": "User Care",
+    "panel_tab_care": "Care",
+    "care_level_happy": "happy",
+    "care_level_normal": "normal",
+    "care_level_angry": "angry",
+    "care_recent": "recent events",
+    "care_last_exit": "last emergency exit",
+    "care_ok": "OK",
+    "care_break_title": "Break time",
+    "care_take_break": "Take a break",
+    "care_snooze": "Snooze",
+    "care_break_window_title": "Break",
+    "care_break_window": "{minutes} minutes away from the screen. Water, stretch, window. I'm counting.",
+    "care_back": "I'm back",
+    "care_forced_warning_title": "Forced break coming",
+    "care_forced_warning": "No snoozes left. A forced break starts in {minutes} minutes: save your work.",
+    "care_forced_title": "Forced break",
+    "care_emergency_exit": "Emergency exit",
+    "care_reason_hint": "Write why (she will remember it):",
+    "care_water_title": "Water",
+    "care_drank": "I drank",
+    "care_later": "Later",
+    "care_sleep_title": "Sleep",
+    "care_sleep_soft": "It's {hour}. Still awake? Dim the screen, breathe slowly; I'm here.",
+    "care_no_answer": "no answer",
+    "care_classify_prompt": "At 3 a.m. the user was asked why they are still awake. Their answer: \"{answer}\"\n"
+                            "Sort it into exactly one category: work (work, a deadline, a project, homework), exam "
+                            "(an exam or studying for one), emergency (a real emergency), cant_sleep (they can't "
+                            "fall asleep), whim (no real reason: gaming, videos, chatting, just because). "
+                            "Reply with JSON only: {{\"category\": \"...\"}}",
+    "care_shutdown_title": "Shutdown",
+    "care_cancel_shutdown": "Cancel shutdown",
+    "care_cancel": "Cancel",
+    "care_final_title": "Shutting down",
+    "care_final_text": "The PC shuts down when the countdown ends. Good night.",
+    "care_shutdown_comment": "Zyraena: time to sleep (cancel: shutdown /a or /iptal on Telegram)",
+    "care_dry_run_note": "(DRY_RUN: it won't really shut down, it's only logged.)",
+    "care_dry_run_done": "DRY_RUN: the PC would have shut down now. Nothing was turned off.",
+    "care_summary_fallback": "Good morning. Yesterday:\n{facts}",
+    "care_fact_bed": "went to bed at {time}",
+    "care_fact_bed_unknown": "bedtime unknown",
+    "care_fact_breaks": "breaks: {taken} taken, {forced} forced, {away} away/asleep; {snoozed} snoozed, {unanswered} ignored",
+    "care_fact_water": "water: {count} times",
+    "care_fact_warnings": "sleep warnings: {count}",
+    "care_fact_exits": "emergency exits: {count} ({reasons})",
+    "care_fact_night": "03:00 answer: {category} -> {verdict}",
+    "care_fact_cancels": "shutdowns cancelled: {count}",
+    "care_cat_work": "work/deadline",
+    "care_cat_exam": "exam",
+    "care_cat_emergency": "emergency",
+    "care_cat_cant_sleep": "can't sleep",
+    "care_cat_whim": "no real reason",
+    "care_verdict_valid": "accepted",
+    "care_verdict_limit": "not accepted (weekly limit used up)",
+    "care_verdict_cant_sleep": "no shutdown, be gentle",
+    "care_verdict_invalid": "not accepted",
+    "care_ev_reason": ", reason: \"{reason}\"",
+    "care_ev_break_taken": "took a break",
+    "care_ev_break_done": "break finished",
+    "care_ev_break_back_early": "came back early from the break",
+    "care_ev_snooze": "snoozed the break ({count} in a row)",
+    "care_ev_unanswered": "ignored the break prompt ({count} in a row)",
+    "care_ev_forced_warning": "forced break announced",
+    "care_ev_forced_start": "forced break started",
+    "care_ev_forced_done": "finished the forced break",
+    "care_ev_emergency_exit": "left the forced break by the emergency exit",
+    "care_ev_afk_break": "away for {minutes} min (counts as a break)",
+    "care_ev_sleep": "PC asleep for {minutes} min (counts as a break)",
+    "care_ev_water": "drank water",
+    "care_ev_water_later": "put off the water",
+    "care_ev_sleep_warning": "sleep warning at {hour}",
+    "care_ev_night_asked": "asked why they're still up",
+    "care_ev_night_reason": "night reason: {category} -> {verdict}",
+    "care_ev_shutdown_warning": "step-by-step shutdown started ({minutes} min)",
+    "care_ev_shutdown_protected": "forced break instead of a shutdown ({why})",
+    "care_ev_shutdown_dry": "DRY_RUN: the PC would have shut down",
+    "care_ev_shutdown": "PC shut down",
+    "care_ev_shutdown_cancel": "cancelled the shutdown ({source})",
+    "care_ev_bedtime": "went to bed at {time}",
+    "care_ev_on_time_bed": "went to bed on time ({time})",
+    "care_ev_peace": "made peace",
+    "care_ev_morning_summary": "morning summary of {of}",
+    "care_rule_program": "program",
+    "care_rule_gpu": "GPU (compute/cuda)",
+    "care_rule_terminal_jobs": "terminal job",
+    "care_rule_training": "training project",
+    "care_rule_zyraena_runs": "Zyraena's scripts",
+    "care_rule_busy_cpu": "busy CPU",
+    "care_rule_downloads": "download",
+    "care_rule_downloads_net": "download (network)",
+    "care_hm": "{h} h {m} min",
+    "care_m": "{m} min",
+    "care_status_mood": "Mood {mood}/100 · {level}",
+    "care_status_active": "Active {active} · next break in {next} ({kind}) · snoozes {snoozes}/{rights}",
+    "care_status_forced": "forced",
+    "care_status_normal": "prompt",
+    "care_status_water": "Water in {next}",
+    "care_status_night": "Tonight: {night} · good reasons this week {used}/{limit}",
+    "care_status_night_none": "-",
+    "care_status_night_asked": "asked, waiting for the answer",
+    "care_status_night_valid": "reason accepted",
+    "care_status_night_limit": "reason not accepted (limit)",
+    "care_status_night_cant_sleep": "can't sleep",
+    "care_status_night_invalid": "no good reason",
+    "care_status_breaking_normal": "On a break now",
+    "care_status_breaking_forced": "Forced break now",
+    "care_status_shutdown": "Step-by-step shutdown running",
+    "care_status_dry_run": "DRY_RUN on (no real shutdown)",
+    "care_status_live": "Real shutdowns ON",
+    "care_status_fake": "debug clock {time}",
+    "care_protect_title": "Protection (the PC is never shut down while one holds)",
+    "care_protect_settings": "Protection settings…",
+    "care_protect_none": "Nothing protected right now: a shutdown would go ahead.",
+    "care_protect_on": "Protected: {why}",
+    "care_protect_window": "Protection settings",
+    "care_protect_explain": "While a rule holds, User Care never shuts the PC down: a forced break comes instead. "
+                            "Breaks and reminders go on either way.",
+    "care_protect_programs": "Programs (exe names)",
+    "care_protect_patterns": "Training (text in a Python command line)",
+    "care_limit_gpu_percent": "GPU %",
+    "care_limit_gpu_minutes": "GPU min",
+    "care_limit_gpu_compute_percent": "compute %",
+    "care_limit_terminal_jobs_cpu_percent": "terminal CPU %",
+    "care_limit_terminal_jobs_minutes": "terminal min",
+    "care_limit_busy_cpu_percent": "busy CPU %",
+    "care_limit_busy_cpu_minutes": "busy CPU min",
+    "care_limit_downloads_mb_per_second": "MB/s",
+    "care_limit_downloads_minutes": "download min",
+    "care_add": "Add",
+    "care_remove": "Remove",
+    "care_save": "Save",
+    "care_saving": "Saving…",
+    "care_saved": "Saved to config.json.",
+    "care_close": "Close",
+    "care_bad_number": "Limits must be numbers.",
+    "care_events_title": "Last events",
+    "care_debug": "debug:",
+    "care_debug_plus10": "+10 min",
+    "care_debug_plus60": "+1 h",
+    "care_debug_at0259": "02:59",
+    "care_debug_at2359": "23:59",
+    "care_debug_at0601": "06:01",
+    "care_debug_away": "away 11 min",
+    "care_debug_sleep": "sleep 30 min",
+    "care_debug_active178": "active 178 min",
+    "care_debug_mood_down": "mood -20",
+    "care_debug_mood_up": "mood +20",
+    "care_hint": "Settings: config.json, \"user_care\" · Esc closes",
+})
+STRINGS["tr"].update({
+    "credits_source_care": "User Care",
+    "panel_tab_care": "Bakım",
+    "care_level_happy": "mutlu",
+    "care_level_normal": "normal",
+    "care_level_angry": "sinirli",
+    "care_recent": "son olaylar",
+    "care_last_exit": "son acil çıkış",
+    "care_ok": "Tamam",
+    "care_break_title": "Mola zamanı",
+    "care_take_break": "Mola ver",
+    "care_snooze": "Ertele",
+    "care_break_window_title": "Mola",
+    "care_break_window": "{minutes} dakika ekrandan uzak. Su, esneme, pencere. Sayıyorum.",
+    "care_back": "Döndüm",
+    "care_forced_warning_title": "Zorunlu mola geliyor",
+    "care_forced_warning": "Erteleme hakkın bitti. {minutes} dakika sonra zorunlu mola: işini kaydet.",
+    "care_forced_title": "Zorunlu mola",
+    "care_emergency_exit": "Acil çıkış",
+    "care_reason_hint": "Sebebini yaz (unutmayacak):",
+    "care_water_title": "Su",
+    "care_drank": "İçtim",
+    "care_later": "Sonra",
+    "care_sleep_title": "Uyku",
+    "care_sleep_soft": "Saat {hour}. Hâlâ uyanık mısın? Ekranı karart, yavaş nefes al; buradayım.",
+    "care_no_answer": "cevap yok",
+    "care_classify_prompt": "Kullanıcıya gece saat 03:00'te neden hâlâ uyumadığı soruldu. Cevabı: \"{answer}\"\n"
+                            "Cevabı tam olarak bir kategoriye ayır: work (iş, deadline, proje, ödev), exam (sınav ya "
+                            "da sınava çalışma), emergency (gerçek bir acil durum), cant_sleep (uyuyamıyor, uykusu "
+                            "gelmiyor), whim (gerçek bir sebep yok: oyun, dizi, sohbet, canı istedi). "
+                            "Sadece JSON ile cevap ver: {{\"category\": \"...\"}}",
+    "care_shutdown_title": "Kapatma",
+    "care_cancel_shutdown": "Kapatmayı iptal et",
+    "care_cancel": "İptal",
+    "care_final_title": "Kapanıyor",
+    "care_final_text": "Geri sayım bitince PC kapanacak. İyi geceler.",
+    "care_shutdown_comment": "Zyraena: uyku vakti (iptal: shutdown /a ya da Telegram'da /iptal)",
+    "care_dry_run_note": "(DRY_RUN: gerçekten kapanmayacak, sadece kayda geçiyor.)",
+    "care_dry_run_done": "DRY_RUN: PC şimdi kapanacaktı. Hiçbir şey kapatılmadı.",
+    "care_summary_fallback": "Günaydın. Dün:\n{facts}",
+    "care_fact_bed": "{time}'da yattın",
+    "care_fact_bed_unknown": "yatış saati bilinmiyor",
+    "care_fact_breaks": "molalar: {taken} verildi, {forced} zorunlu, {away} uzakta/uykuda; {snoozed} ertelendi, {unanswered} cevapsız",
+    "care_fact_water": "su: {count} kez",
+    "care_fact_warnings": "uyku uyarısı: {count}",
+    "care_fact_exits": "acil çıkış: {count} ({reasons})",
+    "care_fact_night": "03:00 cevabı: {category} -> {verdict}",
+    "care_fact_cancels": "iptal edilen kapatma: {count}",
+    "care_cat_work": "iş/deadline",
+    "care_cat_exam": "sınav",
+    "care_cat_emergency": "acil durum",
+    "care_cat_cant_sleep": "uyuyamıyorum",
+    "care_cat_whim": "keyfi",
+    "care_verdict_valid": "kabul edildi",
+    "care_verdict_limit": "kabul edilmedi (haftalık hak doldu)",
+    "care_verdict_cant_sleep": "kapatma yok, şefkat",
+    "care_verdict_invalid": "kabul edilmedi",
+    "care_ev_reason": ", sebep: \"{reason}\"",
+    "care_ev_break_taken": "mola verdi",
+    "care_ev_break_done": "mola bitti",
+    "care_ev_break_back_early": "moladan erken döndü",
+    "care_ev_snooze": "molayı erteledi (art arda {count})",
+    "care_ev_unanswered": "mola uyarısını cevapsız bıraktı (art arda {count})",
+    "care_ev_forced_warning": "zorunlu mola duyuruldu",
+    "care_ev_forced_start": "zorunlu mola başladı",
+    "care_ev_forced_done": "zorunlu molayı tamamladı",
+    "care_ev_emergency_exit": "zorunlu moladan acil çıkışla çıktı",
+    "care_ev_afk_break": "{minutes} dk uzaktaydı (mola sayıldı)",
+    "care_ev_sleep": "PC {minutes} dk uykudaydı (mola sayıldı)",
+    "care_ev_water": "su içti",
+    "care_ev_water_later": "suyu erteledi",
+    "care_ev_sleep_warning": "{hour} uyku uyarısı",
+    "care_ev_night_asked": "neden yatmadığını sordum",
+    "care_ev_night_reason": "gece sebebi: {category} -> {verdict}",
+    "care_ev_shutdown_warning": "kademeli kapatma başladı ({minutes} dk)",
+    "care_ev_shutdown_protected": "kapatma yerine zorunlu mola ({why})",
+    "care_ev_shutdown_dry": "DRY_RUN: PC kapanacaktı",
+    "care_ev_shutdown": "PC kapatıldı",
+    "care_ev_shutdown_cancel": "kapatmayı iptal etti ({source})",
+    "care_ev_bedtime": "{time}'da yattı",
+    "care_ev_on_time_bed": "zamanında yattı ({time})",
+    "care_ev_peace": "barıştık",
+    "care_ev_morning_summary": "{of} günün sabah özeti",
+    "care_rule_program": "program",
+    "care_rule_gpu": "GPU (compute/cuda)",
+    "care_rule_terminal_jobs": "terminal işi",
+    "care_rule_training": "eğitim projesi",
+    "care_rule_zyraena_runs": "Zyraena'nın script'leri",
+    "care_rule_busy_cpu": "yoğun CPU",
+    "care_rule_downloads": "indirme",
+    "care_rule_downloads_net": "indirme (ağ)",
+    "care_hm": "{h} sa {m} dk",
+    "care_m": "{m} dk",
+    "care_status_mood": "Mood {mood}/100 · {level}",
+    "care_status_active": "Aktif {active} · sıradaki mola {next} sonra ({kind}) · erteleme {snoozes}/{rights}",
+    "care_status_forced": "zorunlu",
+    "care_status_normal": "uyarı",
+    "care_status_water": "Su {next} sonra",
+    "care_status_night": "Bu gece: {night} · bu hafta geçerli sebep {used}/{limit}",
+    "care_status_night_none": "-",
+    "care_status_night_asked": "soruldu, cevap bekleniyor",
+    "care_status_night_valid": "sebep kabul edildi",
+    "care_status_night_limit": "sebep kabul edilmedi (hak doldu)",
+    "care_status_night_cant_sleep": "uyuyamıyor",
+    "care_status_night_invalid": "geçerli sebep yok",
+    "care_status_breaking_normal": "Şu an molada",
+    "care_status_breaking_forced": "Şu an zorunlu molada",
+    "care_status_shutdown": "Kademeli kapatma sürüyor",
+    "care_status_dry_run": "DRY_RUN açık (gerçek kapatma yok)",
+    "care_status_live": "Gerçek kapatma AÇIK",
+    "care_status_fake": "debug saati {time}",
+    "care_protect_title": "Koruma (biri varken PC asla kapatılmaz)",
+    "care_protect_settings": "Koruma ayarları…",
+    "care_protect_none": "Şu an koruma yok: kapatma gerekirse yapılır.",
+    "care_protect_on": "Korunuyor: {why}",
+    "care_protect_window": "Koruma ayarları",
+    "care_protect_explain": "Kurallardan biri tutarken User Care PC'yi asla kapatmaz, onun yerine zorunlu mola "
+                            "gelir. Molalar ve hatırlatmalar her durumda devam eder.",
+    "care_protect_programs": "Programlar (exe adları)",
+    "care_protect_patterns": "Eğitim (Python komut satırında geçen metin)",
+    "care_limit_gpu_percent": "GPU %",
+    "care_limit_gpu_minutes": "GPU dk",
+    "care_limit_gpu_compute_percent": "compute %",
+    "care_limit_terminal_jobs_cpu_percent": "terminal CPU %",
+    "care_limit_terminal_jobs_minutes": "terminal dk",
+    "care_limit_busy_cpu_percent": "yoğun CPU %",
+    "care_limit_busy_cpu_minutes": "yoğun CPU dk",
+    "care_limit_downloads_mb_per_second": "MB/sn",
+    "care_limit_downloads_minutes": "indirme dk",
+    "care_add": "Ekle",
+    "care_remove": "Sil",
+    "care_save": "Kaydet",
+    "care_saving": "Kaydediliyor…",
+    "care_saved": "config.json'a kaydedildi.",
+    "care_close": "Kapat",
+    "care_bad_number": "Sınırlar sayı olmalı.",
+    "care_events_title": "Son olaylar",
+    "care_debug": "debug:",
+    "care_debug_plus10": "+10 dk",
+    "care_debug_plus60": "+1 sa",
+    "care_debug_at0259": "02:59",
+    "care_debug_at2359": "23:59",
+    "care_debug_at0601": "06:01",
+    "care_debug_away": "uzakta 11 dk",
+    "care_debug_sleep": "uyku 30 dk",
+    "care_debug_active178": "aktif 178 dk",
+    "care_debug_mood_down": "mood -20",
+    "care_debug_mood_up": "mood +20",
+    "care_hint": "Ayarlar: config.json, \"user_care\" · Esc kapatır",
+})
+
+
+# --- Her lines by mood ----------------------------------------------------------------------------------
+# The pet's lines are pet_lines[_<pose>]_<mood> (happy, normal, angry; worried for the plain ones; a mood
+# without its own falls back to normal, then happy); User Care's are care_<what>_<tone>. Every line is one
+# variant, picked at random. {user} is the owner's name (user_name()).
+# This is the example: copy it to i18n.py (gitignored) and write her lines there, as many per key as you like.
+
+USER_FALLBACK = "Operator"  # when ZYRAENA_USER_NAME isn't set
+
+# How the mood colours her replies in the lady persona (User Care's prompt block).
+PERSONA_TONES = "happy: warmer teasing; normal: your usual self; angry: cold and sharp"
+
+MOOD_LINES = {
+    "en": {
+        "pet_lines_happy": [
+            "Need anything, {user}?"
+        ],
+        "pet_lines_normal": [
+            "Need anything, {user}?"
+        ],
+        "pet_lines_angry": [
+            "Need anything, {user}?"
+        ],
+        "pet_lines_code_happy": [
+            "Keep going, {user}."
+        ],
+        "pet_lines_code_normal": [
+            "Keep going, {user}."
+        ],
+        "pet_lines_code_angry": [
+            "Keep going, {user}."
+        ],
+        "pet_lines_watch_happy": [
+            "Interesting."
+        ],
+        "pet_lines_watch_normal": [
+            "Interesting."
+        ],
+        "pet_lines_watch_angry": [
+            "Interesting."
+        ],
+        "pet_lines_lift_happy": [
+            "This is light."
+        ],
+        "pet_lines_lift_normal": [
+            "This is light."
+        ],
+        "pet_lines_lift_angry": [
+            "This is light."
+        ],
+        "pet_lines_dagger_happy": [
+            "Drow steel."
+        ],
+        "pet_lines_dagger_normal": [
+            "Drow steel."
+        ],
+        "pet_lines_dagger_angry": [
+            "Drow steel."
+        ],
+        "pet_lines_stretch_happy": [
+            "Stretch a little, {user}."
+        ],
+        "pet_lines_stretch_normal": [
+            "Stretch a little, {user}."
+        ],
+        "pet_lines_stretch_angry": [
+            "Stretch a little, {user}."
+        ],
+        "pet_lines_impatient_happy": [
+            "I'm waiting, {user}."
+        ],
+        "pet_lines_impatient_normal": [
+            "I'm waiting, {user}."
+        ],
+        "pet_lines_impatient_angry": [
+            "I'm waiting, {user}."
+        ],
+        "pet_lines_worried": [
+            "It's late. Get some sleep."
+        ],
+        "care_break_prompt_happy": [
+            "{minutes} minutes at the screen. Time for a break."
+        ],
+        "care_break_prompt_normal": [
+            "{minutes} minutes at the screen. Time for a break."
+        ],
+        "care_break_prompt_angry": [
+            "{minutes} minutes at the screen. Time for a break."
+        ],
+        "care_break_prompt_worried": [
+            "{minutes} minutes at the screen. Time for a break."
+        ],
+        "care_forced_text_happy": [
+            "No more snoozing. {minutes} minutes away from the screen."
+        ],
+        "care_forced_text_normal": [
+            "No more snoozing. {minutes} minutes away from the screen."
+        ],
+        "care_forced_text_angry": [
+            "No more snoozing. {minutes} minutes away from the screen."
+        ],
+        "care_forced_text_worried": [
+            "No more snoozing. {minutes} minutes away from the screen."
+        ],
+        "care_break_over_happy": [
+            "Break's over."
+        ],
+        "care_break_over_normal": [
+            "Break's over."
+        ],
+        "care_break_over_angry": [
+            "Break's over."
+        ],
+        "care_break_over_worried": [
+            "Break's over."
+        ],
+        "care_water_happy": [
+            "Time for some water."
+        ],
+        "care_water_normal": [
+            "Time for some water."
+        ],
+        "care_water_angry": [
+            "Time for some water."
+        ],
+        "care_water_worried": [
+            "Time for some water."
+        ],
+        "care_sleep_warning_happy": [
+            "It's {hour}. Time to sleep."
+        ],
+        "care_sleep_warning_normal": [
+            "It's {hour}. Time to sleep."
+        ],
+        "care_sleep_warning_angry": [
+            "It's {hour}. Time to sleep."
+        ],
+        "care_sleep_warning_worried": [
+            "It's {hour}. Time to sleep."
+        ],
+        "care_night_question_happy": [
+            "It's 03:00. Why are you still up? Answer within {minutes} minutes."
+        ],
+        "care_night_question_normal": [
+            "It's 03:00. Why are you still up? Answer within {minutes} minutes."
+        ],
+        "care_night_question_angry": [
+            "It's 03:00. Why are you still up? Answer within {minutes} minutes."
+        ],
+        "care_night_question_worried": [
+            "It's 03:00. Why are you still up? Answer within {minutes} minutes."
+        ],
+        "care_shutdown_warning_happy": [
+            "The PC shuts down in {minutes} minutes. Save your work."
+        ],
+        "care_shutdown_warning_normal": [
+            "The PC shuts down in {minutes} minutes. Save your work."
+        ],
+        "care_shutdown_warning_angry": [
+            "The PC shuts down in {minutes} minutes. Save your work."
+        ],
+        "care_shutdown_warning_worried": [
+            "The PC shuts down in {minutes} minutes. Save your work."
+        ]
+    },
+    "tr": {
+        "pet_lines_happy": [
+            "Bir şey lazım mı, {user}?"
+        ],
+        "pet_lines_normal": [
+            "Bir şey lazım mı, {user}?"
+        ],
+        "pet_lines_angry": [
+            "Bir şey lazım mı, {user}?"
+        ],
+        "pet_lines_code_happy": [
+            "Devam et, {user}."
+        ],
+        "pet_lines_code_normal": [
+            "Devam et, {user}."
+        ],
+        "pet_lines_code_angry": [
+            "Devam et, {user}."
+        ],
+        "pet_lines_watch_happy": [
+            "İlginç."
+        ],
+        "pet_lines_watch_normal": [
+            "İlginç."
+        ],
+        "pet_lines_watch_angry": [
+            "İlginç."
+        ],
+        "pet_lines_lift_happy": [
+            "Bu hafif."
+        ],
+        "pet_lines_lift_normal": [
+            "Bu hafif."
+        ],
+        "pet_lines_lift_angry": [
+            "Bu hafif."
+        ],
+        "pet_lines_dagger_happy": [
+            "Drow çeliği."
+        ],
+        "pet_lines_dagger_normal": [
+            "Drow çeliği."
+        ],
+        "pet_lines_dagger_angry": [
+            "Drow çeliği."
+        ],
+        "pet_lines_stretch_happy": [
+            "Biraz gerin, {user}."
+        ],
+        "pet_lines_stretch_normal": [
+            "Biraz gerin, {user}."
+        ],
+        "pet_lines_stretch_angry": [
+            "Biraz gerin, {user}."
+        ],
+        "pet_lines_impatient_happy": [
+            "Bekliyorum, {user}."
+        ],
+        "pet_lines_impatient_normal": [
+            "Bekliyorum, {user}."
+        ],
+        "pet_lines_impatient_angry": [
+            "Bekliyorum, {user}."
+        ],
+        "pet_lines_worried": [
+            "Saat geç. Biraz uyu."
+        ],
+        "care_break_prompt_happy": [
+            "{minutes} dakikadır ekrandasın. Mola zamanı."
+        ],
+        "care_break_prompt_normal": [
+            "{minutes} dakikadır ekrandasın. Mola zamanı."
+        ],
+        "care_break_prompt_angry": [
+            "{minutes} dakikadır ekrandasın. Mola zamanı."
+        ],
+        "care_break_prompt_worried": [
+            "{minutes} dakikadır ekrandasın. Mola zamanı."
+        ],
+        "care_forced_text_happy": [
+            "Erteleme hakkı bitti. {minutes} dakika ekrandan uzak dur."
+        ],
+        "care_forced_text_normal": [
+            "Erteleme hakkı bitti. {minutes} dakika ekrandan uzak dur."
+        ],
+        "care_forced_text_angry": [
+            "Erteleme hakkı bitti. {minutes} dakika ekrandan uzak dur."
+        ],
+        "care_forced_text_worried": [
+            "Erteleme hakkı bitti. {minutes} dakika ekrandan uzak dur."
+        ],
+        "care_break_over_happy": [
+            "Mola bitti."
+        ],
+        "care_break_over_normal": [
+            "Mola bitti."
+        ],
+        "care_break_over_angry": [
+            "Mola bitti."
+        ],
+        "care_break_over_worried": [
+            "Mola bitti."
+        ],
+        "care_water_happy": [
+            "Su içme vakti."
+        ],
+        "care_water_normal": [
+            "Su içme vakti."
+        ],
+        "care_water_angry": [
+            "Su içme vakti."
+        ],
+        "care_water_worried": [
+            "Su içme vakti."
+        ],
+        "care_sleep_warning_happy": [
+            "Saat {hour}. Uyku vakti."
+        ],
+        "care_sleep_warning_normal": [
+            "Saat {hour}. Uyku vakti."
+        ],
+        "care_sleep_warning_angry": [
+            "Saat {hour}. Uyku vakti."
+        ],
+        "care_sleep_warning_worried": [
+            "Saat {hour}. Uyku vakti."
+        ],
+        "care_night_question_happy": [
+            "Saat 03:00. Neden hâlâ ayaktasın? {minutes} dakika içinde cevap ver."
+        ],
+        "care_night_question_normal": [
+            "Saat 03:00. Neden hâlâ ayaktasın? {minutes} dakika içinde cevap ver."
+        ],
+        "care_night_question_angry": [
+            "Saat 03:00. Neden hâlâ ayaktasın? {minutes} dakika içinde cevap ver."
+        ],
+        "care_night_question_worried": [
+            "Saat 03:00. Neden hâlâ ayaktasın? {minutes} dakika içinde cevap ver."
+        ],
+        "care_shutdown_warning_happy": [
+            "PC {minutes} dakika sonra kapanıyor. İşini kaydet."
+        ],
+        "care_shutdown_warning_normal": [
+            "PC {minutes} dakika sonra kapanıyor. İşini kaydet."
+        ],
+        "care_shutdown_warning_angry": [
+            "PC {minutes} dakika sonra kapanıyor. İşini kaydet."
+        ],
+        "care_shutdown_warning_worried": [
+            "PC {minutes} dakika sonra kapanıyor. İşini kaydet."
+        ]
+    }
+}
+for _lang, _lines in MOOD_LINES.items():
+    STRINGS[_lang].update({key: "\n".join(lines) for key, lines in _lines.items()})
+# --- end of her lines by mood ---------------------------------------------------------------------------
+
+
+def user_name() -> str:
+    """The owner's name in her lines ({user}): ZYRAENA_USER_NAME from .env, else USER_FALLBACK."""
+    return os.environ.get("ZYRAENA_USER_NAME", "").strip() or USER_FALLBACK
 
 
 def get(language: str, key: str, **kwargs) -> str:

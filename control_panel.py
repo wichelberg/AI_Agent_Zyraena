@@ -1,15 +1,17 @@
-"""The panel Ctrl+F1 opens in the middle of the screen, in the text box's neon look, with three tabs.
+"""The panel Ctrl+F1 opens in the middle of the screen, in the text box's neon look, with four tabs.
 General: a button that hides or shows the pet (the way back when she's hidden), the live OpenRouter
 and Tavily credits, fetched in the background once each time it opens ("loading…" until they
 arrive), and a button to the API credit log. Credits: what each paid request cost and what it was
 for (credit_panel.py). Disk: what takes the space and deleting it (disk_panel.py); the pet's "Disk: new
-findings" bubble opens the panel on this tab. Esc or Ctrl+F1 again closes it. It shares the text
+findings" bubble opens the panel on this tab. Care: User Care's mood, timers, protection list and
+events (care_panel.py). Esc or Ctrl+F1 again closes it. It shares the text
 box's Tk thread (chat_box); toggle() and show() are thread-safe.
 """
 import threading
 import tkinter as tk
 
 import chat_box
+import care_panel
 import credit_panel
 import disk_panel
 import i18n
@@ -17,7 +19,7 @@ from chat_box import CYAN, MUTED, NAVY, NAVY_LIGHT, PINK, TEXT, _Neon
 from desktop_pet import _work_area
 
 PANEL_SIZE = (360, 214)
-TABS = ("general", "credits", "disk")
+TABS = ("general", "credits", "disk", "care")
 CREDITS_BUTTON_HEIGHT = 38
 
 _state = {"panel": None}
@@ -48,11 +50,11 @@ def _center(size):
 
 class Panel:
     def __init__(self, root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, on_close, disk=None,
-                 tab="general", credits=None):
+                 tab="general", credits=None, care=None):
         self.root, self.lang, self.pet_visible, self.toggle_pet = root, lang, pet_visible, toggle_pet
-        self.on_close, self.disk, self.credits = on_close, disk, credits
+        self.on_close, self.disk, self.credits, self.care = on_close, disk, credits, care
         self.closed = False
-        self.neon = self.tab = self.disk_tab = self.credit_tab = None
+        self.neon = self.tab = self.disk_tab = self.credit_tab = self.care_tab = None
         self.values, self.results = {}, {}
         self.show_tab(tab)
         self._fetch("openrouter", fetch_openrouter, lambda v: openrouter_text(lang, v), lambda v: v is not None)
@@ -68,7 +70,8 @@ class Panel:
         if self.neon is not None:
             self.neon.destroy()
         self.tab = tab
-        size = self._general_size() if tab == "general" else disk_panel.disk_size(_work_area())
+        size = (self._general_size() if tab == "general" else care_panel.care_size(_work_area()) if tab == "care"
+                else disk_panel.disk_size(_work_area()))
         self.neon = _Neon(self.root, size, *_center(size))
         win = self.neon.win
         self._header(win)
@@ -77,6 +80,8 @@ class Panel:
         elif tab == "disk":
             self.disk_tab = disk_panel.DiskTab(self.root, win, self.lang, self.disk, first_row=2)
             self.disk_tab.tree.bind("<Escape>", lambda e: self.close())
+        elif tab == "care":
+            self.care_tab = care_panel.CareTab(self.root, win, self.lang, self.care, first_row=2)
         else:
             self.credit_tab = credit_panel.CreditTab(self.root, win, self.lang, self.credits, first_row=2)
             self.credit_tab.tree.bind("<Escape>", lambda e: self.close())
@@ -86,13 +91,13 @@ class Panel:
         win.focus_force()
 
     def _service(self, tab):
-        return {"general": True, "disk": self.disk, "credits": self.credits}.get(tab)
+        return {"general": True, "disk": self.disk, "credits": self.credits, "care": self.care}.get(tab)
 
     def _general_size(self):
         return PANEL_SIZE[0], PANEL_SIZE[1] + (CREDITS_BUTTON_HEIGHT if self.credits is not None else 0)
 
     def _close_tab(self):
-        for name in ("disk_tab", "credit_tab"):
+        for name in ("disk_tab", "credit_tab", "care_tab"):
             view = getattr(self, name)
             if view is not None:
                 view.close()
@@ -198,22 +203,23 @@ class Panel:
         self.on_close()
 
 
-def toggle(lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk=None, credits=None):
+def toggle(lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk=None, credits=None, care=None):
     """Thread-safe: opens the panel or closes it. pet_visible() -> bool, toggle_pet() -> visible after,
     fetch_openrouter() -> USD or None, fetch_tavily() -> (kind, data); the fetches run on worker threads.
-    disk: the Disk tab's service (disk_watch), credits: the credit log (credit_log); without them those
-    tabs aren't there."""
+    disk: the Disk tab's service (disk_watch), credits: the credit log (credit_log), care: User Care
+    (user_care.Care); without them those tabs aren't there."""
     _run(lambda root: _state["panel"].close() if _state["panel"] is not None
-         else _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, "general", credits))
+         else _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, "general", credits,
+                    care))
 
 
-def show(tab, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk=None, credits=None):
+def show(tab, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk=None, credits=None, care=None):
     """Thread-safe: opens the panel on `tab`, or switches the open panel to it."""
     def run(root):
         if _state["panel"] is not None:
             _state["panel"].show_tab(tab)
         else:
-            _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, tab, credits)
+            _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, tab, credits, care)
     _run(run)
 
 
@@ -223,12 +229,12 @@ def _run(fn):
     chat_box.post(lambda: fn(root))  # never waits: the caller may be the pet's Tk thread
 
 
-def _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, tab, credits=None):
+def _open(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, disk, tab, credits=None, care=None):
     def closed():
         _state["panel"] = None
 
     _state["panel"] = Panel(root, lang, pet_visible, toggle_pet, fetch_openrouter, fetch_tavily, closed, disk, tab,
-                            credits)
+                            credits, care)
 
 
 def is_open():

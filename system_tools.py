@@ -53,6 +53,7 @@ _dwmapi = ctypes.windll.dwmapi
 _runs = {}  # run id -> dict(proc, name, path, log, started, ended, code, done Event)
 _run_lock = threading.Lock()
 _power = {"plan": None}  # the single active shutdown plan, if any
+cancel_hooks = []  # () -> bool: other shutdowns cancel_shutdown stops too (User Care's); True if one ran
 
 
 class ToolError(Exception):
@@ -559,12 +560,14 @@ def _cancel_plan():
 
 
 def cancel_shutdown() -> str:
-    """Cancels Zyraena's plan and any shutdown Windows is already counting down (e.g. one planned by a
-    Claude Code session in sleep mode)."""
+    """Cancels Zyraena's plan, User Care's shutdown (cancel_hooks) and any shutdown Windows is already
+    counting down (e.g. one planned by a Claude Code session in sleep mode)."""
     plan = _cancel_plan()
+    hooked = [hook() for hook in cancel_hooks]
     aborted = subprocess.run(["shutdown", "/a"], capture_output=True,
                              creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0
-    return "Cancelled the planned shutdown; the PC stays on." if plan or aborted else "No shutdown was planned."
+    return ("Cancelled the planned shutdown; the PC stays on." if plan or aborted or any(hooked)
+            else "No shutdown was planned.")
 
 
 def shutdown_status() -> str:

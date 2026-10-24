@@ -36,6 +36,7 @@ model there can be used.
 | Voice | Say "Zyraena açıl" and talk; she answers out loud and keeps listening until "Zyraena kapat", with a light around the screen moving with her voice; send Telegram voice notes (she confirms what she understood before acting) |
 | Claude Code | Hand a bigger job (e.g. code changes) to a headless [Claude Code](https://claude.com/claude-code) session with `/c` |
 | Credits | See your remaining OpenRouter credit and roughly how many messages it covers; the Ctrl+F1 panel shows the OpenRouter and Tavily credit live, and its "API credit log" button opens the Credits tab: every paid request (text box, Telegram, voice chat, cloud speech-to-text, disk scan) with what it was for, model, tokens, tools called, the cost OpenRouter reported, the balance before and after and their difference (OpenRouter shows a new balance about a minute late), plus totals for today / 7 / 30 days and by source. Stored in `%LOCALAPPDATA%\Zyraena\credit_log.sqlite` |
+| User Care | Breaks, water and sleep, with her mood toward you as a layer on her persona (see [User Care](#user-care)): a break prompt every hour of active use, snoozes allowed by her mood, then a fullscreen forced break; water every hour; sleep warnings after midnight; at 03:00 she asks why you're still up and shuts the PC down step by step without a good reason (dry run until you turn it on); a summary of yesterday every morning. The Ctrl+F1 panel's Care tab shows it all and switches the protection rules |
 | Disk | The Ctrl+F1 panel's Disk tab shows what takes the space on C: as items (Steam games, programs, Pythons and venvs, caches, HuggingFace models, projects, your folders, unknown big folders) with size, last use and its source, what it is, whether it can be downloaded again and what depends on it; delete goes the way the kind is meant to (Steam, the uninstaller, `pip cache purge`, Recycle Bin…) after a confirm listing what breaks. Once a day an idle scan runs and the pet says "Disk: new findings" past the `ZYRAENA_DISK_*` limits. At start she deletes the `_MEI` folders force-closed exes left in Temp. Memory and history live in `%LOCALAPPDATA%\Zyraena\disk` (`knowledge.json` can be edited by hand) |
 | Desktop | A realistic, full-body Zyraena lives above the taskbar: most of the time she sits cross-legged on her throne in the bottom-right corner, now and then she gets up, walks around, turns toward you and says something, then goes back. While a fullscreen game or video is in front she leans on the screen edge and watches it, and clicks go through her. She can be picked up and dropped; click her to open the chat, right-click for a menu |
 
@@ -64,6 +65,7 @@ cd Zyraena
 python -m pip install -r requirements.txt
 
 copy .env.example .env                       # then fill in OPENROUTER_API_KEY and TAVILY_API_KEY
+copy i18n.example.py i18n.py                 # required: UI text and her lines by mood (edit them there)
 copy personality.example.md personality.md   # optional: the persona for "lady" mode
 copy config.example.json config.json         # optional: example alarms (reminders create it anyway)
 ```
@@ -319,6 +321,58 @@ is on top (with a stretch now and then), watching the screen, curling a dumbbell
 dagger or stretching with any other window, and leaning on
 the screen edge while a fullscreen game or video runs.
 
+## User Care
+
+Zyraena looks after you. It isn't a second persona: her mood toward you (0-100, starts at 50) and the
+last five events with their reasons go into the lady persona's system prompt with every message, e.g.
+`[mood: 24/100, sinirli, son olaylar: 02:40 uyku uyarısı (-10); ...]`, and she reacts in character,
+brings up the reasons and makes peace when you apologize (the `care_make_peace` tool, +5, at most every
+2 hours and twice a day). However low her mood, she still does what you ask; late at night a low mood is
+worry, not anger. The assistant mode stays neutral. Happy is 70 and up, angry 30 and down; she drifts
+back toward 50 by 1 point an hour. The points are rough on purpose: good habits barely lift
+her mood, slips cost a lot.
+
+| What | Rule (all numbers in `config.json`, `user_care`) | Mood |
+|---|---|---|
+| Break prompt | Every 60 min of active use: "Mola ver" / "Ertele" | +2 / -15 |
+| Unanswered | 5 min without an answer while you use the PC counts as a snooze (just being away doesn't) | -20 |
+| Forced break | When the snoozes in a row run out (happy 2, normal 1, angry 0): "save" 2 min before, then a fullscreen 10 min countdown with no close button. Nothing blocks the keyboard or mouse; the emergency exit needs a written reason she remembers | +5 done / -30 exit |
+| Break over | A Telegram message in her voice | |
+| Water | Every 60 min of active use: "İçtim" / "Sonra" (back in 15 min) | +1 / -3 |
+| Away | 5 min without input stops the timers (not while a fullscreen video plays); 10 min away, or the PC sleeping, counts as a break | 0 |
+| Night | 00:00-06:00: a sleep warning every hour | -15 |
+| 03:00 | She opens the text box and asks why you're up; Gemini Flash sorts the answer: work / exam / emergency (accepted twice a week: warnings stop tonight), can't sleep (gentle, never shuts down), no reason (or no answer in 10 min): step-by-step shutdown | |
+| Shutdown | "Save" 5 min before (2 when angry), a countdown, the last 60 s fullscreen; cancel with a reason in the window, `/iptal` on Telegram or `shutdown /a` | -30 cancel |
+| Bedtime | The last input before a 4 h gap starting after 22:00 is when you went to bed; before 03:00 gives a bonus the next day | +10 |
+| Morning | The first activity after 06:00: yesterday in the text box (bedtime, breaks given / snoozed / forced, water, emergency exits with their reasons) | |
+
+**Protection list.** While one of these holds, User Care never shuts the PC down; a forced break comes
+instead (breaks and reminders go on either way). It only guards User Care's own shutdown: one you ask
+for and sleep mode's are not affected. Every rule can be switched on the Care tab; "Protection
+settings…" edits the lists and limits.
+
+| Rule | Holds when |
+|---|---|
+| Programs | `claude.exe` (Claude Code), `blender.exe`, `Unity.exe`, `VideoEditorPlus.exe` (Movavi), `rsession.exe` (RStudio), `yt-dlp.exe` is running |
+| GPU | The GPU is past 80% for 3 min and the load is on the compute/cuda engine (training), not 3d (a game); her own voice workers don't count |
+| Terminal job | Something started from a terminal (PowerShell, cmd, VS Code's terminal) used CPU for 3 min; an idle terminal doesn't count |
+| Training | A Python command line contains one of the training patterns (Wichelberg's `data\egitim`, `RNNModel`, `Voice_Changer_Production`, `train_stt.py`) |
+| Zyraena's scripts | A script she runs with `run_python` hasn't finished |
+| Busy CPU | A background process (not the one in front, not Windows) used over 40% of the CPU for 5 min |
+| Downloads | A `.crdownload` / `.opdownload` / `.part` file in Downloads grew in the last 2 min, or over 5 MB/s came in for 3 min |
+
+**Dry run.** `"dry_run": true` (the default) runs every step but never calls `shutdown.exe`; the log and
+Telegram say what would have happened. Set it to `false` in `config.json` for real shutdowns.
+
+**Debug.** `py -3 user_care.py --debug --at 02:58 --active 178 --mood 25 --speed 30` runs User Care
+alone on a fake clock (30 times faster here), with its own state file (fresh each run; `--keep` goes on
+from the last one), never shutting down and without Telegram (add `--telegram` to send). `--active 178` is the "third hour" case: two snoozes used, two
+minutes to go. The Care tab opens with buttons to move the clock (+10 min, +1 h, 02:59, 23:59, 06:01),
+fake being away or asleep, and change the mood.
+
+State and history: `%LOCALAPPDATA%\Zyraena\care` (`state.json`, `events.jsonl`; the debug run uses
+`state_debug.json`, `events_debug.jsonl`; `ZYRAENA_CARE_HOME` moves it).
+
 ## Configuration
 
 All settings live in `.env`; see [.env.example](.env.example) for the full list with
@@ -375,6 +429,9 @@ Older `HANNAH_*` setting names (the project's former name) are still accepted.
   files are off-limits. To undo a night's work, copy the folder back from `Failsafe`. The health
   monitor always runs during sleep mode (even with `ZYRAENA_HEALTH=off`): an overheating job is
   ended like any other program. Claude is told not to message you on Telegram while you sleep.
+- User Care's shutdown is dry run until `dry_run` is set to `false`, is always cancellable (the window,
+  `/iptal`, `shutdown /a`), and checks the protection list when it starts and again right before the
+  end; while it holds, a forced break comes instead. The forced break never blocks input.
 - WhatsApp: files go only to a number you give with its country code or a chat you name (no
   guessing, no stored contacts), only from the allowed folders, never secrets (`.env`, keys,
   `.ssh`...), and only after you confirm the chat WhatsApp opened and a screenshot of it. Reading
@@ -395,6 +452,7 @@ Older `HANNAH_*` setting names (the project's former name) are still accepted.
 | `browser_tools.py` | Opera GX and YouTube |
 | `system_tools.py` | Closing apps, Python runs, terminal, VS Code, shutdown, PC status |
 | `health_monitor.py` | Background health checks, alarms and their escalation |
+| `user_care.py`, `care_guard.py`, `care_windows.py`, `care_panel.py` | User Care: the rules, mood and state; the protection list; its windows (prompts, breaks, fullscreen); the panel's Care tab |
 | `steam_tools.py` | Installed Steam games |
 | `whatsapp_tools.py` | WhatsApp Desktop: chat list, reading messages (UI Automation), sending files |
 | `web_control.py` | Opera GX through the Zyraena Web Control extension |

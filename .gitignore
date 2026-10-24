@@ -1,6 +1,7 @@
 # Secrets and personal data (examples are committed instead)
 .env
 personality.md
+i18n.py
 config.json
 chat_logs/
 run_logs/

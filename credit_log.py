@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SOURCES = ("box", "telegram", "voice", "stt", "disk", "other")
+SOURCES = ("box", "telegram", "voice", "stt", "disk", "care", "other")
 # Seconds after an entry ends when its "after" balance is read, until it shows the cost. Measured
 # 2026-10-21: OpenRouter's /credits still had the old balance 36 s after a request and the new one
 # (lower by exactly the reported cost) about a minute later.
