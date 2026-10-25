@@ -1433,6 +1433,12 @@ def visible():
     return pet is not None and not pet.hidden
 
 
+def can_talk():
+    """Whether a bubble would show now: she's shown and not in game mode."""
+    pet = _state["pet"]
+    return pet is not None and not pet.hidden and pet.game is None
+
+
 def toggle():
     """Thread-safe: shows her if she's hidden (starting her if needed), else hides her.
     Returns whether she is visible afterwards."""

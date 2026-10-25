@@ -20,9 +20,11 @@ AFTER_SPEECH = 0.3     # before listening again: the speakers' tail
 
 
 class Session:
-    def __init__(self, answer, new_chat, transcribe, notify, activity, glow, log_dir):
+    def __init__(self, answer, new_chat, transcribe, notify, activity, glow, log_dir, ended=None):
         self._answer, self._new_chat, self._transcribe = answer, new_chat, transcribe
         self._notify, self._activity, self._glow, self._log_dir = notify, activity, glow, log_dir
+        self._ended = ended or (lambda chat: None)  # the finished conversation (relationship.chat_ended)
+        self._chat = None
         self._lock = threading.Lock()
         self._on = False
         self._turn = 0
@@ -78,6 +80,10 @@ class Session:
         self._glow.hide()
         self._activity(None)
         self._log("—", f"(closed: {why})")
+        try:
+            self._ended(self._chat)
+        except Exception as e:
+            print(f"Voice: after the conversation: {e!r}")
 
     def _log(self, who, text):
         if self._log_path is None:
@@ -174,13 +180,13 @@ def _local_transcribe(wav_bytes):
     return voice.local_stt.transcribe(wav_bytes) or ""
 
 
-def setup(answer, new_chat, notify, activity, log_dir):
+def setup(answer, new_chat, notify, activity, log_dir, ended=None):
     """Creates the session (main.py); voice_guard ends it on battery or in a game."""
     import glow
     import voice_guard
 
     if _session["it"] is None:
-        _session["it"] = Session(answer, new_chat, _local_transcribe, notify, activity, glow, log_dir)
+        _session["it"] = Session(answer, new_chat, _local_transcribe, notify, activity, glow, log_dir, ended)
         voice_guard.listeners.append(
             lambda mode, suspect: _session["it"].close("battery, a game, or the GPU busy")
             if (mode != "ready" or suspect) and _session["it"].active() else None)

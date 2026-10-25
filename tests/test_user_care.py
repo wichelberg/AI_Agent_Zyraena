@@ -323,7 +323,17 @@ class NightTest(unittest.TestCase):
         sim = self.night()
         sim.run(3 * 60 - 2)  # until 02:57
         self.assertEqual(sim.kinds().count("sleep_warning"), 3)  # 00, 01, 02
-        self.assertAlmostEqual(sim.care.state["mood"], 50 - 30 + 2 + 2 + 1.9, delta=0.1)  # +2/h back toward 50
+        points = [e["points"] for e in sim.care.state["recent"] if e["kind"] == "sleep_warning"]
+        self.assertEqual(points, [0, -5, -15])  # night.warning_points
+        self.assertAlmostEqual(sim.care.state["mood"], 50 - 20 + 2 + 1.9, delta=0.1)  # +2/h back toward 50
+
+    def test_no_warning_or_prompt_while_away_at_night(self):
+        sim = Sim(at="23:50", cfg={"break": {"every_minutes": 60}, "water": {"every_minutes": 20}})
+        sim.run(99, idle=True)  # away from 23:50 (AFK after afk_minutes) to 01:29
+        self.assertNotIn("sleep_warning", sim.kinds())
+        self.assertEqual(sim.ui.kinds("prompt"), [])  # no water or break prompt either
+        sim.run(1)
+        self.assertEqual(sim.kinds().count("sleep_warning"), 1)  # only this hour's (01), once they're back
 
     def test_nothing_pops_up_during_a_forced_break(self):
         sim = self.night()
@@ -379,8 +389,10 @@ class NightTest(unittest.TestCase):
     def test_no_good_reason_starts_the_shutdown(self):
         sim = self.night(mood=90, classify='{"category": "whim"}')  # still "normal" after three warnings
         sim.run(3 * 60 + 2)
+        mood = sim.mood()
         sim.care.box_message("canım istedi")
         self.assertIsNotNone(sim.care.shutdown)
+        self.assertAlmostEqual(sim.mood(), mood - 30, delta=0.1)  # night_refused
         name, args, _ = sim.ui.last("shutdown_warning")
         self.assertEqual(args[0], 300)
 
@@ -551,6 +563,7 @@ class StateAndConfigTest(unittest.TestCase):
         mood = user_care.DEFAULTS["mood"]
         self.assertEqual(mood["snoozes"], {"happy": 2, "normal": 1, "angry": 0})
         self.assertEqual((mood["points"]["snooze"], mood["points"]["water"], mood["drift_per_hour"]), (-15, 1, 1))
+        self.assertEqual((mood["points"]["break"], mood["points"]["night_refused"]), (5, -30))
         self.assertEqual((mood["start"], user_care.DEFAULTS["water"]["every_minutes"]), (25, 20))
         sim = Sim(mood=50, cfg={"mood": user_care.DEFAULTS["mood"], "water": {"every_minutes": 600}})
         sim.run(60)

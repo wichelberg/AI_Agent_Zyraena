@@ -8,14 +8,18 @@ mode) with every message, together with the last events and their reasons.
   emergency exit with a written reason). No input blocking. Breaks end with a Telegram message.
 - Away: no keyboard/mouse input for `afk_minutes` stops the timers (unless a fullscreen video plays);
   `afk_break_minutes` away, or a sleeping PC (a jump in time between two checks), counts as a break.
-- Night (start_hour..end_hour): a sleep warning every hour; at check_hour she opens the text box and asks
+- Night (start_hour..end_hour): a sleep warning every hour (points by hour: warning_points); at check_hour she opens the text box and asks
   why the owner is still up. The answer is sorted by the assistant model (work, exam, emergency, can't
   sleep, whim); a good reason (at most excuses_per_week) stops the warnings for the night, "can't sleep"
-  never shuts down, anything else starts a step-by-step shutdown.
+  never shuts down, anything else costs night_refused points and starts a step-by-step shutdown.
 - Shutdown: a "save your work" warning, a countdown, the last `final_seconds` fullscreen, always
   cancellable (the window, Telegram /iptal, `shutdown /a`). The protection list (care_guard) is checked at
   the start and right before; while it holds, a forced break comes instead. dry_run (the default) only logs.
 - Every first morning: yesterday's summary in the text box.
+- Affection: how close she is to the owner, apart from the mood (relationship.py moves it after each
+  conversation). Mood level x affection level picks one of nine relationship styles for her prompt.
+- Drop-in: now and then, while the owner works, she says something on her own in the pet's bubble
+  (about the window in front; a click on the bubble opens the text box with it).
 
 Everything is in config.json ("user_care"; missing keys are filled in from DEFAULTS and written back).
 The state (mood, events, timers, weekly excuses) is in %LOCALAPPDATA%\\Zyraena\\care.
@@ -51,15 +55,27 @@ DEFAULTS = {
               "forced_warning_minutes": 2, "afk_break_minutes": 10},
     "water": {"every_minutes": 20, "later_minutes": 15, "answer_minutes": 5},
     "night": {"start_hour": 0, "end_hour": 6, "check_hour": 3, "answer_minutes": 10, "excuses_per_week": 2,
-              "bedtime_gap_hours": 4, "bedtime_from_hour": 22},
+              "bedtime_gap_hours": 4, "bedtime_from_hour": 22,
+              # Sleep warning points by hour (owner, 2026-10-25); hours not listed use mood.points.sleep_warning.
+              "warning_points": {"00": 0, "01": -5, "02": -15}},
     "shutdown": {"warning_minutes": 5, "angry_warning_minutes": 2, "final_seconds": 60},
     # Rough on purpose (owner, 2026-10-24): good habits barely lift her mood, slips cost a lot.
     "mood": {"start": 25, "happy_from": 70, "angry_to": 30, "drift_per_hour": 1,
              "snoozes": {"happy": 2, "normal": 1, "angry": 0},
-             "points": {"break": 2, "snooze": -15, "unanswered": -20, "forced_done": 5, "emergency_exit": -30,
+             "points": {"break": 5, "snooze": -15, "unanswered": -20, "forced_done": 5, "emergency_exit": -30,
                         "water": 1, "water_later": -3, "sleep_warning": -15, "on_time_bed": 10, "peace": 5,
-                        "shutdown_cancel": -30}},
+                        "shutdown_cancel": -30, "night_refused": -30}},
     "peace": {"min_hours": 2, "per_day": 2},
+    # Affection (owner, 2026-10-25): how close she is to them, apart from the mood. No drift; only the
+    # look at each finished conversation (relationship.py) moves it, within these limits.
+    "affection": {"start": 50, "high_from": 70, "low_to": 30, "max_per_chat": 5, "up_per_day": 8,
+                  "down_per_day": 15},
+    # She comes by on her own: a free check every check_minutes, then one persona call that may say SKIP.
+    # Only the window title is sent, never a screenshot. Off: Ctrl+F1 → Bakım.
+    "drop_in": {"enabled": True, "check_minutes": 10, "chance": 0.3, "min_gap_minutes": 120,
+                "active_minutes": 15, "after_chat_minutes": 30, "bubble_seconds": 40,
+                "per_day": {"high": 4, "normal": 2, "low": 1},
+                "skip_programs": ["keepass.exe", "keepassxc.exe", "bitwarden.exe", "1password.exe"]},
     "protect": {
         "programs": ["claude.exe", "blender.exe", "Unity.exe", "VideoEditorPlus.exe", "rsession.exe", "yt-dlp.exe"],
         "gpu": {"enabled": True, "percent": 80, "minutes": 3, "compute_percent": 20},
@@ -191,7 +207,8 @@ def new_state(cfg):
     return {"mood": float(cfg["mood"]["start"]), "active": 0.0, "cycle": 0.0, "snoozes": 0, "water": 0.0,
             "water_due": cfg["water"]["every_minutes"] * 60.0, "last_seen": None, "last_input": None,
             "night": {}, "excuses": [], "peace": [], "summary_day": None, "slept_night": None,
-            "forced_until": None, "recent": []}
+            "forced_until": None, "recent": [], "affection": float(cfg["affection"]["start"]),
+            "affection_day": {}, "drop_in": {}, "last_chat": None}
 
 
 class Store:
@@ -294,14 +311,18 @@ class Care:
     Tk thread; both take the lock. `ui` (care_windows) never waits, so holding the lock while calling it
     is safe. `persona(instruction, what)` -> Zyraena's text (slow: always on its own thread),
     `classify(prompt, what)` -> the assistant model's answer, `notify(text)` -> Telegram,
-    `chat(text)` -> opens the text box with her line."""
+    `chat(text)` -> opens the text box with her line, `screen()` -> (exe, window title) of what the owner
+    is using, or None when she can't drop in now, `drop_in(text)` -> shows her drop-in line."""
 
     def __init__(self, cfg, store, clock, ui, guard, persona=None, classify=None, notify=None, chat=None,
-                 lang=lambda: "tr", idle=None, video=None, config_path=None):
+                 lang=lambda: "tr", idle=None, video=None, config_path=None, screen=None, drop_in=None):
         self.cfg, self.store, self.clock, self.ui, self.guard = cfg, store, clock, ui, guard
         self.persona, self.classify = persona, classify
         self.notify = notify or print
         self.chat = chat or (lambda text: None)
+        self.screen = screen or (lambda: None)
+        self.drop_in_say = drop_in or (lambda text: None)
+        self._drop_check = None  # when the next drop-in check is due
         self.lang = lang
         self.idle = idle or system_tools.idle_seconds
         self.video = video or fullscreen_video
@@ -329,6 +350,15 @@ class Care:
         mood = self.state["mood"] if mood is None else mood
         m = self.cfg["mood"]
         return "happy" if mood >= m["happy_from"] else "angry" if mood <= m["angry_to"] else "normal"
+
+    def affection_level(self, affection=None):
+        affection = self.state["affection"] if affection is None else affection
+        a = self.cfg["affection"]
+        return "high" if affection >= a["high_from"] else "low" if affection <= a["low_to"] else "normal"
+
+    def relation(self):
+        """The relationship style's key: mood level x affection level, e.g. "normal_high"."""
+        return f"{self.level()}_{self.affection_level()}"
 
     def night_hours(self):
         n = self.cfg["night"]
@@ -487,6 +517,7 @@ class Care:
                     self.state["water"] += dt if "water" not in self.prompts else 0
                     self._breaks(now)
                     self._water(now)
+                    self._drop_in(now, idle)
             self._night(now, away, dt)
             self._shutdown_step(now)
             self.state["last_seen"] = _iso(now)
@@ -727,7 +758,8 @@ class Care:
         if now.hour != n["check_hour"] and now.hour not in night["warned"] and night["verdict"] != "valid":
             night["warned"].append(now.hour)
             soft = night["verdict"] == "cant_sleep"
-            self.event("sleep_warning", 0 if soft else self._points("sleep_warning"), now=now, hour=f"{now:%H:%M}")
+            points = n["warning_points"].get(f"{now:%H}", self._points("sleep_warning"))
+            self.event("sleep_warning", 0 if soft else points, now=now, hour=f"{now:%H:%M}")
             hour = f"{now:%H:00}"
             text = self.t("care_sleep_soft", hour=hour) if soft else self.toned("care_sleep_warning", now, hour=hour)
             self.ui.notice("sleep", self.t("care_sleep_title"), text,
@@ -784,9 +816,10 @@ class Care:
             verdict = "invalid"
         night["verdict"] = verdict
         night["category"] = category
-        self.event("night_reason", now=now, reason=reason, category=category, verdict=verdict,
-                   used=used, limit=n["excuses_per_week"])
-        if verdict in ("invalid", "limit"):
+        refused = verdict in ("invalid", "limit")
+        self.event("night_reason", self._points("night_refused") if refused else 0, now=now, reason=reason,
+                   category=category, verdict=verdict, used=used, limit=n["excuses_per_week"])
+        if refused:
             self.start_shutdown(now, f"night:{category}")
         self._save(force=True)
 
@@ -975,7 +1008,12 @@ class Care:
                            and e not in recent and now - _dt(e["t"]) <= timedelta(hours=GRUDGE_HOURS)), None)
             if grudge:
                 line += f"\n[{i18n.get(lang, 'care_last_exit')}: {grudge['t'][:16].replace('T', ' ')} \"{grudge['reason']}\"]"
-            parts = [line, PROMPT_RULES]
+            relation = self.relation()
+            parts = [line, f"[affection: {round(self.state['affection'])}/100, "
+                           f"{i18n.get(lang, 'care_aff_' + self.affection_level())} · "
+                           f"{i18n.get(lang, 'care_rel_' + relation)}]",
+                     "Your relationship style right now (mood x affection): " + i18n.RELATION_STYLES[relation],
+                     PROMPT_RULES]
             if self.in_night(now):
                 parts.append("It is late at night: a low mood shows as worry about them, not anger.")
             night = self.state["night"]
@@ -984,8 +1022,8 @@ class Care:
                     category=night.get("category", ""), limit=self.cfg["night"]["excuses_per_week"]))
             elif night.get("check") == "asked":
                 parts.append("You asked them why they are still up; their next message is the answer.")
-            return "User Care (your mood toward the user, a layer on your own persona; never a different "\
-                   "persona):\n" + "\n".join(parts)
+            return "User Care (your mood and affection toward the user, a layer on your own persona; never a "\
+                   "different persona):\n" + "\n".join(parts)
 
     def make_peace(self, reason):
         """The care_make_peace tool: an apology or a promise brings the mood up, a few times a day at most."""
@@ -1002,6 +1040,101 @@ class Care:
             entry = self.event("peace", self._points("peace"), reason=(reason or "").strip()[:200], now=now)
             self._save(force=True)
             return f"Peace made: mood is now {entry['mood']}/100 ({self.level()})."
+
+    # --- affection ----------------------------------------------------------------------------------------
+
+    def add_affection(self, change, reason="", source=""):
+        """The look at a finished conversation (relationship.py): at most max_per_chat either way, and
+        no more than up_per_day / down_per_day in a day. Returns the change that counted."""
+        with self.lock:
+            a = self.cfg["affection"]
+            now = self.clock.now()
+            day = self.day_key(now)
+            spent = self.state["affection_day"].get(day, {"up": 0, "down": 0})
+            change = max(-a["max_per_chat"], min(a["max_per_chat"], int(round(change or 0))))
+            if change > 0:
+                change = min(change, max(0, a["up_per_day"] - spent["up"]))
+            elif change < 0:
+                change = -min(-change, max(0, a["down_per_day"] - spent["down"]))
+            if change == 0:
+                return 0
+            old = self.state["affection"]
+            self.state["affection"] = min(100.0, max(0.0, old + change))
+            change = int(round(self.state["affection"] - old))
+            spent = dict(spent, up=spent["up"] + max(change, 0), down=spent["down"] + max(-change, 0))
+            self.state["affection_day"] = {day: spent}  # older days don't matter any more
+            self.event("affection", reason=(reason or "").strip()[:200], now=now, change=change,
+                       affection=round(self.state["affection"]), source=source)
+            self._save(force=True)
+            return change
+
+    def note_chat(self):
+        """A conversation just ended: no drop-in right after it."""
+        with self.lock:
+            self.state["last_chat"] = _iso(self.clock.now())
+            self._dirty = True
+
+    # --- drop-in ------------------------------------------------------------------------------------------
+
+    def _drop_in(self, now, idle):
+        """Every check_minutes, while they're at the PC and nothing else of hers is on screen, a chance
+        that she comes by on her own. All of this is free; only the line itself costs a persona call."""
+        d = self.cfg["drop_in"]
+        if not d["enabled"] or self.persona is None:
+            return
+        if self._drop_check is not None and now < self._drop_check:
+            return
+        self._drop_check = now + timedelta(minutes=d["check_minutes"])
+        state = self.state["drop_in"]
+        last, chat = _dt(state.get("last")), _dt(self.state.get("last_chat"))
+        today = self.day_key(now)
+        count = state.get("count", 0) if state.get("day") == today else 0
+        if (self.in_night(now) or self.prompts or self.forced_at is not None or idle >= 60
+                or self.state["cycle"] < d["active_minutes"] * 60
+                or count >= d["per_day"][self.affection_level()]
+                or (last is not None and now - last < timedelta(minutes=d["min_gap_minutes"]))
+                or (chat is not None and now - chat < timedelta(minutes=d["after_chat_minutes"]))
+                or random.random() >= d["chance"]):
+            return
+        try:
+            seen = self.screen()
+        except Exception as e:
+            _log(f"drop-in: reading the screen failed: {e!r}")
+            seen = None
+        if not seen:
+            return  # the box is open, a game, the pet hidden...: no call
+        exe, title = seen
+        if exe.lower() in [p.lower() for p in d["skip_programs"]]:
+            return
+        # Counted before the call: a SKIP is her choice too, and she isn't asked again right away.
+        self.state["drop_in"] = {"day": today, "count": count + 1, "last": _iso(now)}
+        self._dirty = True
+        minutes = int(self.state["cycle"] // 60)
+        instruction = (f"You decide on your own to drop by and say something to the user, unprompted. Right now "
+                       f"they are using {exe or 'an app'}, window title: \"{title[:150]}\"; they have been at the "
+                       f"PC for {minutes} minutes since their last break. Say one or two short sentences in "
+                       "character, in your current relationship style: a remark or tease about what they are "
+                       "doing, a question, or checking on them; you may bring up a memory if it fits. Don't "
+                       "remind them about water or breaks (that is handled elsewhere). If you have nothing "
+                       "worth saying right now, answer exactly SKIP.")
+
+        def work():
+            try:
+                text = (self.persona(instruction, "drop-in") or "").strip()
+            except Exception as e:
+                _log(f"drop-in text failed: {e!r}")
+                return
+            if not text or text.strip(" .*\"'").upper() == "SKIP":
+                _log("drop-in: she had nothing to say")
+                return
+            with self.lock:
+                self.event("drop_in", program=exe or "?")
+            try:
+                self.drop_in_say(text)
+            except Exception as e:
+                _log(f"drop-in failed: {e!r}")
+
+        threading.Thread(target=work, daemon=True).start()
 
     # --- the panel's Care tab -----------------------------------------------------------------------------
 
@@ -1021,24 +1154,32 @@ class Care:
                 "night": night.get("verdict") or night.get("check"),
                 "excuses": sum(1 for d in self.state["excuses"] if datetime.fromisoformat(d).isocalendar()[:2] == week),
                 "excuse_limit": self.cfg["night"]["excuses_per_week"],
+                "affection": round(self.state["affection"]), "affection_level": self.affection_level(),
+                "relation": self.relation(), "drop_in": bool(self.cfg["drop_in"]["enabled"]),
             }
 
     def recent(self, n=12):
         with self.lock:
             return [(e["t"], self.describe(e)) for e in reversed(self.state["recent"][-n:])]
 
-    def set_protect(self, changes):
-        """Changes protection settings in config.json: [(path, value)], a path like ("gpu", "enabled") or
-        ("programs",). Slow (looks at the processes again): not on a Tk thread."""
+    def set_options(self, changes):
+        """Changes settings in config.json's user_care section: [(path, value)], a path like
+        ("drop_in", "enabled"). Writes the file: not on a Tk thread."""
         with self.lock:
             for path, value in changes:
-                target = self.cfg["protect"]
+                target = self.cfg
                 for key in path[:-1]:
                     target = target[key]
                 target[path[-1]] = value
             if self.config_path:
                 save_config(self.cfg, self.config_path)
                 self._config_mtime = self._mtime()
+
+    def set_protect(self, changes):
+        """Changes protection settings in config.json: [(path, value)], a path like ("gpu", "enabled") or
+        ("programs",). Slow (looks at the processes again): not on a Tk thread."""
+        self.set_options([(("protect",) + tuple(path), value) for path, value in changes])
+        with self.lock:
             protect = copy.deepcopy(self.cfg["protect"])
         found = self.guard.reasons(protect)  # outside the lock: the panel reads the status every second
         with self.lock:
@@ -1093,9 +1234,14 @@ class Care:
             self.state["mood"] = min(100.0, max(0.0, self.state["mood"] + points))
             self._dirty = True
 
+    def debug_affection(self, points):
+        with self.lock:
+            self.state["affection"] = min(100.0, max(0.0, self.state["affection"] + points))
+            self._dirty = True
+
 
 PROMPT_RULES = (
-    "React to it in character: let the mood colour your tone (" + i18n.PERSONA_TONES + ") and bring up "
+    "React to it in character: speak in that relationship style and bring up "
     "these events and their reasons when it fits. If the user sincerely "
     "apologizes or promises to look after themselves, you may forgive them: call care_make_peace. However "
     "low your mood, still do whatever they ask, fully and correctly; you may grumble while doing it.")
@@ -1135,7 +1281,8 @@ def service():
     return _state["care"]
 
 
-def start(persona=None, classify=None, notify=None, chat=None, lang=lambda: "tr", debug=None):
+def start(persona=None, classify=None, notify=None, chat=None, lang=lambda: "tr", debug=None, screen=None,
+          drop_in=None):
     """Starts User Care (unless switched off in config.json). debug: overrides for the debug section."""
     if _state["care"] is not None:
         return _state["care"]
@@ -1156,7 +1303,8 @@ def start(persona=None, classify=None, notify=None, chat=None, lang=lambda: "tr"
     from care_windows import Windows
 
     care = Care(cfg, store, clock, Windows(lang), care_guard.Guard(runs=_running_scripts), persona=persona,
-                classify=classify, notify=notify, chat=chat, lang=lang, config_path=config_loader.CONFIG_PATH)
+                classify=classify, notify=notify, chat=chat, lang=lang, config_path=config_loader.CONFIG_PATH,
+                screen=screen, drop_in=drop_in)
     if dbg["enabled"]:
         if dbg.get("mood") is not None:
             care.state["mood"] = float(dbg["mood"])
@@ -1192,6 +1340,40 @@ def box_message(text):
             care.box_message(text)
     except Exception as e:
         _log(f"box message failed: {e!r}")
+
+
+def add_affection(change, reason="", source=""):
+    """relationship.py's verdict on a finished conversation. Returns the change that counted (0 if User
+    Care isn't running). Never raises."""
+    care = _state["care"]
+    try:
+        return care.add_affection(change, reason, source) if care else 0
+    except Exception as e:
+        _log(f"affection failed: {e!r}")
+        return 0
+
+
+def affection():
+    """(affection 0-100, level) or None if User Care isn't running."""
+    care = _state["care"]
+    if care is None:
+        return None
+    with care.lock:
+        return round(care.state["affection"]), care.affection_level()
+
+
+def note_chat():
+    care = _state["care"]
+    if care:
+        care.note_chat()
+
+
+def log_event(kind, **data):
+    """An event from outside User Care (a never-forget memory) for the Care tab and her prompt."""
+    care = _state["care"]
+    if care:
+        with care.lock:
+            care.event(kind, **data)
 
 
 def care_make_peace(reason: str = "") -> str:

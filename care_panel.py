@@ -1,8 +1,9 @@
-"""The control panel's Care tab (control_panel.py): User Care's mood, active time, the next break and
-water reminder, tonight's state, the protection list (on/off per rule, live) and the last events. The
-"Protection settings…" window edits the program list, the training patterns and every rule's limits.
-On User Care's fake clock (debug) a row of buttons moves time, fakes being away or asleep, and changes
-the mood.
+"""The control panel's Care tab (control_panel.py): User Care's mood and affection (with the relationship
+style they make), active time, the next break and water reminder, tonight's state, the drop-in switch,
+the protection list (on/off per rule, live) and the last events. The "Protection settings…" window edits
+the program list, the training patterns and every rule's limits; "Memories…" shows her never-forget
+memories (add, delete) and the last conversation notes (relationship.py). On User Care's fake clock
+(debug) a row of buttons moves time, fakes being away or asleep, and changes the mood and affection.
 
 Everything here runs on the panel's Tk thread; changes that write config.json or look at the processes
 run on a worker thread.
@@ -11,11 +12,13 @@ import threading
 import tkinter as tk
 
 import i18n
+import relationship
 from chat_box import CYAN, MUTED, NAVY, NAVY_LIGHT, PINK, TEXT, _Neon
 from desktop_pet import _work_area
 
-CARE_SIZE = (780, 620)
+CARE_SIZE = (780, 700)
 PROTECT_SIZE = (620, 560)
+MEMORY_SIZE = (640, 560)
 RULES = ("gpu", "terminal_jobs", "training", "zyraena_runs", "busy_cpu", "downloads")
 LIMITS = (("gpu", "percent"), ("gpu", "minutes"), ("gpu", "compute_percent"), ("terminal_jobs", "cpu_percent"),
           ("terminal_jobs", "minutes"), ("busy_cpu", "percent"), ("busy_cpu", "minutes"),
@@ -23,8 +26,10 @@ LIMITS = (("gpu", "percent"), ("gpu", "minutes"), ("gpu", "compute_percent"), ("
 DEBUG_BUTTONS = (("plus10", "advance", 10), ("plus60", "advance", 60), ("at0259", "clock", "02:59"),
                  ("at2359", "clock", "23:59"), ("at0601", "clock", "06:01"), ("away", "away", 11),
                  ("sleep", "sleep", 30), ("active178", "active", 178), ("mood_down", "mood", -20),
-                 ("mood_up", "mood", 20))
+                 ("mood_up", "mood", 20), ("aff_down", "affection", -20), ("aff_up", "affection", 20))
+DEBUG_PER_ROW = 6
 LEVEL_COLORS = {"happy": CYAN, "normal": TEXT, "angry": PINK}
+AFFECTION_COLORS = {"high": PINK, "normal": TEXT, "low": MUTED}
 REFRESH_MS = 1000
 EVENTS_SHOWN = 12
 
@@ -97,6 +102,7 @@ class CareTab:
         self.root, self.win, self.lang, self.care = root, win, lang, care
         self.closed = False
         self.protect_window = None
+        self.memory_window = None
         t = self.t
         win.columnconfigure(0, weight=1)
         row = first_row
@@ -104,19 +110,29 @@ class CareTab:
         self.mood = tk.Label(win, text="", bg=NAVY, fg=TEXT, font=("Segoe UI", 12, "bold"), anchor="w")
         self.mood.grid(row=row, column=0, columnspan=2, sticky="ew", padx=16)
         self.bar = tk.Canvas(win, height=8, bg=NAVY_LIGHT, highlightthickness=0)
-        self.bar.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=16, pady=(2, 8))
+        self.bar.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=16, pady=(2, 6))
+        self.affection = tk.Label(win, text="", bg=NAVY, fg=TEXT, font=("Segoe UI", 11, "bold"), anchor="w")
+        self.affection.grid(row=row + 2, column=0, columnspan=2, sticky="ew", padx=16)
+        self.affection_bar = tk.Canvas(win, height=8, bg=NAVY_LIGHT, highlightthickness=0)
+        self.affection_bar.grid(row=row + 3, column=0, columnspan=2, sticky="ew", padx=16, pady=(2, 8))
         self.status = tk.Label(win, text="", bg=NAVY, fg=TEXT, font=("Segoe UI", 9), anchor="w", justify="left")
-        self.status.grid(row=row + 2, column=0, columnspan=2, sticky="ew", padx=16)
+        self.status.grid(row=row + 4, column=0, columnspan=2, sticky="ew", padx=16)
+
+        self.drop_in = tk.IntVar(win, value=1 if care.cfg["drop_in"]["enabled"] else 0)
+        _check(win, t("care_drop_in"), self.drop_in, self._set_drop_in).grid(row=row + 5, column=0, sticky="w",
+                                                                              padx=12, pady=(6, 0))
+        _button(win, t("care_memories"), self.open_memories).grid(row=row + 5, column=1, sticky="e", padx=16,
+                                                                  pady=(6, 0))
 
         tk.Label(win, text=t("care_protect_title"), bg=NAVY, fg=PINK, font=("Segoe UI", 10, "bold"),
-                 anchor="w").grid(row=row + 3, column=0, sticky="w", padx=16, pady=(10, 0))
-        _button(win, t("care_protect_settings"), self.open_protect, PINK).grid(row=row + 3, column=1, sticky="e",
+                 anchor="w").grid(row=row + 6, column=0, sticky="w", padx=16, pady=(10, 0))
+        _button(win, t("care_protect_settings"), self.open_protect, PINK).grid(row=row + 6, column=1, sticky="e",
                                                                                  padx=16, pady=(10, 0))
         self.protect = tk.Label(win, text="", bg=NAVY, fg=MUTED, font=("Segoe UI", 9), anchor="w", justify="left",
                                 wraplength=CARE_SIZE[0] - 40)
-        self.protect.grid(row=row + 4, column=0, columnspan=2, sticky="ew", padx=16)
+        self.protect.grid(row=row + 7, column=0, columnspan=2, sticky="ew", padx=16)
         rules = tk.Frame(win, bg=NAVY)
-        rules.grid(row=row + 5, column=0, columnspan=2, sticky="ew", padx=12, pady=(2, 0))
+        rules.grid(row=row + 8, column=0, columnspan=2, sticky="ew", padx=12, pady=(2, 0))
         cfg = care.cfg["protect"]
         self.rule_vars = {}
         for i, rule in enumerate(RULES):
@@ -128,23 +144,24 @@ class CareTab:
             rules.columnconfigure(c, weight=1)
 
         tk.Label(win, text=t("care_events_title"), bg=NAVY, fg=PINK, font=("Segoe UI", 10, "bold"),
-                 anchor="w").grid(row=row + 6, column=0, columnspan=2, sticky="w", padx=16, pady=(10, 2))
+                 anchor="w").grid(row=row + 9, column=0, columnspan=2, sticky="w", padx=16, pady=(10, 2))
         self.events = tk.Text(win, bg=NAVY_LIGHT, fg=TEXT, font=("Segoe UI", 9), relief="flat", height=10,
                               wrap="word", highlightthickness=0, padx=8, pady=6, cursor="arrow")
-        self.events.grid(row=row + 7, column=0, columnspan=2, sticky="nsew", padx=16)
-        win.rowconfigure(row + 7, weight=1)
+        self.events.grid(row=row + 10, column=0, columnspan=2, sticky="nsew", padx=16)
+        win.rowconfigure(row + 10, weight=1)
         self.events.tag_configure("time", foreground=MUTED)
         self.events.configure(state="disabled")
 
         if care.clock.fake:
             debug = tk.Frame(win, bg=NAVY)
-            debug.grid(row=row + 8, column=0, columnspan=2, sticky="ew", padx=16, pady=(8, 0))
-            tk.Label(debug, text=t("care_debug"), bg=NAVY, fg=MUTED, font=("Segoe UI", 8, "italic")).pack(side="left")
-            for name, action, value in DEBUG_BUTTONS:
-                _button(debug, t("care_debug_" + name), lambda a=action, v=value: self._debug(a, v)).pack(
-                    side="left", padx=(4, 0))
+            debug.grid(row=row + 11, column=0, columnspan=2, sticky="ew", padx=16, pady=(8, 0))
+            tk.Label(debug, text=t("care_debug"), bg=NAVY, fg=MUTED, font=("Segoe UI", 8, "italic")).grid(
+                row=0, column=0, sticky="w")
+            for i, (name, action, value) in enumerate(DEBUG_BUTTONS):
+                _button(debug, t("care_debug_" + name), lambda a=action, v=value: self._debug(a, v)).grid(
+                    row=i // DEBUG_PER_ROW, column=1 + i % DEBUG_PER_ROW, sticky="ew", padx=(4, 0), pady=(0, 2))
         tk.Label(win, text=t("care_hint"), bg=NAVY, fg=MUTED, font=("Segoe UI", 8, "italic"),
-                 anchor="center").grid(row=row + 9, column=0, columnspan=2, sticky="ew", padx=16, pady=(6, 10))
+                 anchor="center").grid(row=row + 12, column=0, columnspan=2, sticky="ew", padx=16, pady=(6, 10))
         self.refresh()
 
     def t(self, key, **kw):
@@ -167,6 +184,15 @@ class CareTab:
         self.bar.delete("all")
         width = max(1, self.bar.winfo_width())
         self.bar.create_rectangle(0, 0, width * s["mood"] / 100, 8, fill=LEVEL_COLORS[s["level"]], width=0)
+        color = AFFECTION_COLORS[s["affection_level"]]
+        self.affection.configure(text=self.t("care_status_affection", affection=s["affection"],
+                                             level=self.t("care_aff_" + s["affection_level"]),
+                                             relation=self.t("care_rel_" + s["relation"])), fg=color)
+        self.affection_bar.delete("all")
+        width = max(1, self.affection_bar.winfo_width())
+        self.affection_bar.create_rectangle(0, 0, width * s["affection"] / 100, 8, fill=color, width=0)
+        if bool(self.drop_in.get()) != s["drop_in"]:  # config.json may have changed it
+            self.drop_in.set(1 if s["drop_in"] else 0)
         self.status.configure(text="\n".join(status_lines(self.lang, s)))
         self.protect.configure(text=protection_text(self.lang, s["protection"]),
                                fg=CYAN if s["protection"] else MUTED)
@@ -185,21 +211,113 @@ class CareTab:
         value = bool(self.rule_vars[rule].get())
         _in_background(lambda: self.care.set_protect([((rule, "enabled"), value)]))
 
+    def _set_drop_in(self):
+        value = bool(self.drop_in.get())
+        _in_background(lambda: self.care.set_options([(("drop_in", "enabled"), value)]))
+
     def _debug(self, action, value):
         care = self.care
         run = {"advance": lambda: care.debug_advance(value), "clock": lambda: care.debug_set_clock(value),
                "away": lambda: care.debug_away(value), "sleep": lambda: care.debug_sleep(value),
-               "active": lambda: care.debug_set_active(value), "mood": lambda: care.debug_mood(value)}[action]
+               "active": lambda: care.debug_set_active(value), "mood": lambda: care.debug_mood(value),
+               "affection": lambda: care.debug_affection(value)}[action]
         _in_background(run)
 
     def open_protect(self):
         if self.protect_window is None or self.protect_window.closed:
             self.protect_window = ProtectWindow(self.root, self.lang, self.care)
 
+    def open_memories(self):
+        if self.memory_window is None or self.memory_window.closed:
+            self.memory_window = MemoryWindow(self.root, self.lang)
+
     def close(self):
         self.closed = True
-        if self.protect_window is not None:
-            self.protect_window.close()
+        for window in (self.protect_window, self.memory_window):
+            if window is not None:
+                window.close()
+
+
+class MemoryWindow:
+    """Her never-forget memories (the owner adds and deletes them; code never removes one) and the last
+    conversation notes, read-only (relationship.py)."""
+
+    def __init__(self, root, lang):
+        self.root, self.lang, self.closed = root, lang, False
+        left, top, right, bottom = _work_area()
+        size = (min(MEMORY_SIZE[0], right - left - 80), min(MEMORY_SIZE[1], bottom - top - 80))
+        self.neon = _Neon(root, size, (left + right - size[0]) // 2 + 40, (top + bottom - size[1]) // 2 + 30)
+        win = self.win = self.neon.win
+        t = self.t
+        win.columnconfigure(0, weight=1)
+        tk.Label(win, text=t("care_mem_window"), bg=NAVY, fg=PINK, font=("Segoe UI", 12, "bold"),
+                 anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 2))
+        tk.Label(win, text=t("care_mem_explain"), bg=NAVY, fg=MUTED, font=("Segoe UI", 8, "italic"), anchor="w",
+                 justify="left", wraplength=size[0] - 32).grid(row=1, column=0, sticky="ew", padx=16)
+
+        tk.Label(win, text=t("care_mem_core"), bg=NAVY, fg=TEXT, font=("Segoe UI", 9, "bold"), anchor="w").grid(
+            row=2, column=0, sticky="ew", padx=16, pady=(8, 0))
+        self.core = tk.Listbox(win, bg=NAVY_LIGHT, fg=TEXT, selectbackground=PINK, relief="flat", highlightthickness=0,
+                               font=("Segoe UI", 9), height=8, activestyle="none")
+        self.core.grid(row=3, column=0, sticky="nsew", padx=16, pady=(2, 4))
+        win.rowconfigure(3, weight=1)
+        row = tk.Frame(win, bg=NAVY)
+        row.grid(row=4, column=0, sticky="ew", padx=16)
+        self.entry = tk.Entry(row, bg=NAVY_LIGHT, fg=TEXT, insertbackground=CYAN, relief="flat", highlightthickness=0,
+                              font=("Segoe UI", 9))
+        self.entry.pack(side="left", fill="x", expand=True, ipady=2)
+        self.entry.bind("<Return>", lambda e: self.add())
+        _button(row, t("care_add"), self.add).pack(side="left", padx=(6, 0))
+        _button(row, t("care_remove"), self.remove, PINK).pack(side="left", padx=(6, 0))
+
+        tk.Label(win, text=t("care_mem_notes"), bg=NAVY, fg=TEXT, font=("Segoe UI", 9, "bold"), anchor="w").grid(
+            row=5, column=0, sticky="ew", padx=16, pady=(10, 0))
+        self.notes = tk.Text(win, bg=NAVY_LIGHT, fg=TEXT, font=("Segoe UI", 9), relief="flat", height=8, wrap="word",
+                             highlightthickness=0, padx=8, pady=6, cursor="arrow")
+        self.notes.grid(row=6, column=0, sticky="nsew", padx=16, pady=(2, 0))
+        win.rowconfigure(6, weight=1)
+        self.notes.tag_configure("time", foreground=MUTED)
+        _button(win, t("care_close"), self.close, PINK).grid(row=7, column=0, sticky="e", padx=16, pady=(8, 12))
+        win.bind("<Escape>", lambda e: self.close())
+        self.ids = []
+        self.fill()
+        win.lift()
+        win.focus_force()
+
+    def t(self, key, **kw):
+        return i18n.get(self.lang, key, **kw)
+
+    def fill(self):
+        data = relationship.load()
+        self.core.delete(0, "end")
+        self.ids = [m["id"] for m in data["core"]]
+        for m in data["core"]:
+            self.core.insert("end", f"{m['t'][:10]}  {m['text']}")
+        self.notes.configure(state="normal")
+        self.notes.delete("1.0", "end")
+        for n in reversed(data["notes"]):
+            self.notes.insert("end", f"{n['t'][5:16].replace('T', ' ')}  ", "time")
+            self.notes.insert("end", n["text"] + "\n")
+        if not data["notes"]:
+            self.notes.insert("end", self.t("care_mem_none"), "time")
+        self.notes.configure(state="disabled")
+
+    def add(self):
+        text = self.entry.get().strip()
+        if text:
+            relationship.add_core(text, "owner")
+            self.entry.delete(0, "end")
+            self.fill()
+
+    def remove(self):
+        for index in self.core.curselection():
+            relationship.remove_core(self.ids[index])
+        self.fill()
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self.neon.destroy()
 
 
 class ProtectWindow:

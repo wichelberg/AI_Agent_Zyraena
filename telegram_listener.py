@@ -26,6 +26,7 @@ import alert
 import claude_bridge
 import i18n
 import pc_tools
+import relationship
 import screen_tools
 import system_tools
 import voice
@@ -247,6 +248,7 @@ def _handle(comm, backend, text):
     _log(f"{ai_assistant.USER_NAME} (Telegram)", text)
     label = None
     if text.lower() in RESET_COMMANDS:
+        relationship.chat_ended(_chat["messages"], "telegram")
         _chat["messages"] = None
         claude_bridge.reset()
         reply = i18n.get(LANGUAGE, "telegram_new_chat")
@@ -264,6 +266,7 @@ def _handle(comm, backend, text):
         label = "Claude Code"
     else:
         if _chat["messages"] is None or time.time() - _chat["last"] > CHAT_IDLE_RESET_SECONDS:
+            relationship.chat_ended(_chat["messages"], "telegram")  # the old one is over
             _chat["messages"] = ai_assistant.new_chat()
         _chat["last"] = time.time()
         confirm = lambda key, **kwargs: _confirm(comm, backend, key, **kwargs)

@@ -1035,6 +1035,62 @@ STRINGS["tr"].update({
     "care_debug_mood_up": "mood +20",
     "care_hint": "Ayarlar: config.json, \"user_care\" · Esc kapatır",
 })
+STRINGS["en"].update({
+    "care_aff_high": "loves",
+    "care_aff_normal": "friends",
+    "care_aff_low": "professional",
+    "care_rel_happy_high": "motherly, loving, possessive",
+    "care_rel_normal_high": "disciplinarian, possessive",
+    "care_rel_angry_high": "possessive dominatrix",
+    "care_rel_happy_normal": "best friends",
+    "care_rel_normal_normal": "regular",
+    "care_rel_angry_normal": "upset",
+    "care_rel_happy_low": "supportive coworker",
+    "care_rel_normal_low": "normal coworker",
+    "care_rel_angry_low": "hated coworker",
+    "care_status_affection": "Affection {affection}/100 · {level} · {relation}",
+    "care_ev_affection": "affection {change:+d} → {affection}",
+    "care_ev_drop_in": "came by on her own ({program})",
+    "care_ev_core_memory": "never-forget memory: {text}",
+    "care_drop_in": "She comes by on her own (window title only, a few times a day)",
+    "care_memories": "Memories…",
+    "care_mem_window": "Zyraena's memories",
+    "care_mem_explain": "Never-forget memories stay in her prompt for good; only you delete them, here. A note is "
+                        "written after each conversation; the last 8 go into her prompt.",
+    "care_mem_core": "Never forget",
+    "care_mem_notes": "Conversation notes",
+    "care_mem_none": "(none yet)",
+    "care_debug_aff_down": "affection -20",
+    "care_debug_aff_up": "affection +20",
+})
+STRINGS["tr"].update({
+    "care_aff_high": "seviyor",
+    "care_aff_normal": "arkadaş",
+    "care_aff_low": "profesyonel",
+    "care_rel_happy_high": "anaç, sevgi dolu, sahiplenici",
+    "care_rel_normal_high": "disiplinci, sahiplenici",
+    "care_rel_angry_high": "sahiplenici dominatrix",
+    "care_rel_happy_normal": "en iyi arkadaş",
+    "care_rel_normal_normal": "normal",
+    "care_rel_angry_normal": "kırgın",
+    "care_rel_happy_low": "destekçi iş arkadaşı",
+    "care_rel_normal_low": "normal iş arkadaşı",
+    "care_rel_angry_low": "nefret edilen iş arkadaşı",
+    "care_status_affection": "Affection {affection}/100 · {level} · {relation}",
+    "care_ev_affection": "affection {change:+d} → {affection}",
+    "care_ev_drop_in": "kendiliğinden yanına geldi ({program})",
+    "care_ev_core_memory": "asla unutmayacağı bir anı: {text}",
+    "care_drop_in": "Kendiliğinden gelip konuşsun (sadece pencere başlığı, günde birkaç kez)",
+    "care_memories": "Anılar…",
+    "care_mem_window": "Zyraena'nın anıları",
+    "care_mem_explain": "Asla unutma anıları prompt'ta hep kalır; onları sadece sen, buradan silersin. Her "
+                        "konuşmanın sonunda bir not yazılır; son 8'i prompt'a girer.",
+    "care_mem_core": "Asla unutma",
+    "care_mem_notes": "Konuşma notları",
+    "care_mem_none": "(henüz yok)",
+    "care_debug_aff_down": "affection -20",
+    "care_debug_aff_up": "affection +20",
+})
 
 
 # --- Her lines by mood ----------------------------------------------------------------------------------
@@ -1045,8 +1101,19 @@ STRINGS["tr"].update({
 
 USER_FALLBACK = "Operator"  # when ZYRAENA_USER_NAME isn't set
 
-# How the mood colours her replies in the lady persona (User Care's prompt block).
-PERSONA_TONES = "happy: warmer teasing; normal: your usual self; angry: cold and sharp"
+# Her relationship style in the lady persona (User Care's prompt block): mood level x affection level.
+# Affection: high = Loves, normal = Friends, low = Professional.
+RELATION_STYLES = {
+    "happy_high": "Loves: warm and affectionate, proud of them.",
+    "normal_high": "Loves: strict but caring, firm about their habits.",
+    "angry_high": "Loves: stern and sharp, but it is clear she cares.",
+    "happy_normal": "Friends: playful teasing as an equal.",
+    "normal_normal": "Friends: your usual self.",
+    "angry_normal": "Friends: a little hurt, cooler than usual.",
+    "happy_low": "Professional: polite and encouraging.",
+    "normal_low": "Professional: neutral, sticks to the work.",
+    "angry_low": "Professional: cold and curt; still does the job.",
+}
 
 MOOD_LINES = {
     "en": {

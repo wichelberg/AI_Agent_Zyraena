@@ -12,6 +12,7 @@ import disk_watch
 import health_monitor
 import i18n
 import pc_tools
+import relationship
 import telegram_listener
 import voice_guard
 import voice_session
@@ -99,7 +100,8 @@ def main():
     voice_session.setup(answer=lambda chat, text: ai_assistant.answer_message(chat, text, source="voice"),
                         new_chat=ai_assistant.new_chat,
                         notify=lambda text: pc_tools.fallback_notify(text),  # Telegram, once it's connected
-                        activity=desktop_pet.activity, log_dir=ai_assistant.CHAT_LOG_DIR)
+                        activity=desktop_pet.activity, log_dir=ai_assistant.CHAT_LOG_DIR,
+                        ended=lambda chat: relationship.chat_ended(chat, "voice"))
     wake.start(on_wake=voice_session.start, paused=voice_session.active)
     web_control.start()
     web_control.watch(notify=_extension_problem, lang=ai_assistant.current_language)

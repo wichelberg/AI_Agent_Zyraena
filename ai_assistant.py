@@ -22,6 +22,7 @@ import credit_log
 import disk_watch
 import media_tools
 import pc_tools
+import relationship
 import reminder_tools
 import screen_tools
 import sleep_mode
@@ -217,7 +218,7 @@ TOOLS = [
     },
 ] + (pc_tools.TOOLS + browser_tools.TOOLS + system_tools.TOOLS + steam_tools.TOOLS
      + screen_tools.TOOLS + media_tools.TOOLS + reminder_tools.TOOLS + whatsapp_tools.TOOLS
-     + web_control.TOOLS + sleep_mode.TOOLS)
+     + web_control.TOOLS + sleep_mode.TOOLS + relationship.TOOLS)
 
 TOOL_FUNCTIONS = {
     "web_search": web_search,
@@ -233,6 +234,7 @@ TOOL_FUNCTIONS = {
     **web_control.TOOL_FUNCTIONS,
     **sleep_mode.TOOL_FUNCTIONS,
     **user_care.TOOL_FUNCTIONS,
+    **relationship.TOOL_FUNCTIONS,
 }
 
 
@@ -327,7 +329,8 @@ def _system_prompt(mode):
     clock = f"Current local date and time: {now:%Y-%m-%d %H:%M} ({now:%A})."
     text = f"{mode['system']}\n\n{clock}" if mode["system"] else clock
     care = user_care.prompt_block() if mode is MODES["lady"] else ""  # the mood is the persona's, not the assistant's
-    return f"{text}\n\n{care}" if care else text
+    memories = relationship.prompt_block()  # both modes: the owner mostly talks to her in assistant mode
+    return "\n\n".join(part for part in (text, care, memories) if part)
 
 
 def _tools(mode):
@@ -513,8 +516,10 @@ def _box_open():
 
 def _box_close():
     with _lock:
+        chat = _state["chat"]
         _state["chat"] = None
         _state["log_path"] = None
+    relationship.chat_ended(chat, "box")
     import voice_session
 
     if not voice_session.active():  # a spoken conversation keeps her busy
@@ -557,13 +562,16 @@ def toggle_chat_box():
 
 def say_in_box(text):
     """Thread-safe: Zyraena starts the conversation herself (User Care: the 03:00 question, the morning
-    summary): the text box opens (unless it's open) with her line, and the chat goes on from it."""
+    summary, a drop-in the owner clicked): the text box opens (unless it's open) with her line, and the
+    chat goes on from it in lady mode: she came as herself (owner, 2026-10-25; the chats they open
+    themselves stay in the default mode, for tasks)."""
     if not chat_box.is_open():
         toggle_chat_box()
 
     def add():
         chat = _state["chat"]
         if chat is not None:
+            chat["mode"] = "lady"
             # A user turn first: some providers don't take a conversation that starts with the assistant.
             chat["messages"] += [{"role": "user", "content": "[Zyraena opened the chat herself.]"},
                                  {"role": "assistant", "content": text}]
@@ -642,10 +650,42 @@ def ask_persona(instruction, what=""):
     return data["choices"][0]["message"].get("content") or ""
 
 
+def _front_window():
+    """(exe, title) of the window the owner is using, for a drop-in; None when she shouldn't come by now
+    (the text box or a spoken conversation is open, the pet is hidden or in game mode, her own window)."""
+    import ctypes
+    from ctypes import wintypes
+
+    import voice_session
+
+    if chat_box.is_open() or voice_session.active() or not desktop_pet.can_talk():
+        return None
+    hwnd = desktop_pet.user32.GetForegroundWindow()
+    if not hwnd:
+        return None
+    pid = wintypes.DWORD()
+    desktop_pet.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if pid.value == os.getpid():
+        return None  # before GetWindowText: it would wait for one of this app's own threads (see desktop_pet)
+    title = ctypes.create_unicode_buffer(256)
+    desktop_pet.user32.GetWindowTextW(hwnd, title, 256)
+    _, exe = desktop_pet._process_name(hwnd)
+    return (exe, title.value) if title.value.strip() else None
+
+
+def _drop_in_say(text):
+    """Her drop-in line in the pet's bubble; a click on it opens the text box with it, to answer her."""
+    seconds = user_care.service().cfg["drop_in"]["bubble_seconds"] if user_care.service() else 40
+    desktop_pet.say(text, seconds=seconds, on_click=lambda: say_in_box(text))
+
+
 def start_user_care(notify, debug=None):
-    """Starts User Care (user_care.py) with Zyraena's voice, the text box and `notify` (Telegram)."""
-    return user_care.start(persona=ask_persona, classify=lambda prompt, what: ask_flash(prompt, what, "care"),
-                           notify=notify, chat=say_in_box, lang=current_language, debug=debug)
+    """Starts User Care (user_care.py) with Zyraena's voice, the text box and `notify` (Telegram), and
+    relationship.py's look back at finished conversations."""
+    classify = lambda prompt, what: ask_flash(prompt, what, "care")  # noqa: E731
+    relationship.configure(classify=classify, lang=current_language, user=USER_NAME, ai=AI_NAME)
+    return user_care.start(persona=ask_persona, classify=classify, notify=notify, chat=say_in_box,
+                           lang=current_language, debug=debug, screen=_front_window, drop_in=_drop_in_say)
 
 
 HOTKEY = "<ctrl>+<f1>"
