@@ -27,10 +27,10 @@
         "break": {
             "every_minutes": 60,
             "answer_minutes": 5,
-            "normal_minutes": 10,
-            "forced_minutes": 10,
+            "normal_minutes": 5,
+            "forced_minutes": 5,
             "forced_warning_minutes": 2,
-            "afk_break_minutes": 10
+            "afk_break_minutes": 5
         },
         "water": {
             "every_minutes": 20,

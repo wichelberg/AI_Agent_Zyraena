@@ -8,6 +8,8 @@ run_logs/
 assets/user.*
 assets/Zyraena_full.png
 whatsapp_uia_dump*.txt
+DevelopmentPlanLogs/development_logs.txt
+DevelopmentPlanLogs/finished_logs.txt
 
 # Build output
 build/

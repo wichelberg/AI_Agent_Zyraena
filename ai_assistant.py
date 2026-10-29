@@ -16,6 +16,7 @@ import desktop_pet
 import i18n
 import paths
 import browser_tools
+import calendar_tools
 import chat_box
 import control_panel
 import credit_log
@@ -217,7 +218,7 @@ TOOLS = [
         },
     },
 ] + (pc_tools.TOOLS + browser_tools.TOOLS + system_tools.TOOLS + steam_tools.TOOLS
-     + screen_tools.TOOLS + media_tools.TOOLS + reminder_tools.TOOLS + whatsapp_tools.TOOLS
+     + screen_tools.TOOLS + media_tools.TOOLS + reminder_tools.TOOLS + calendar_tools.TOOLS + whatsapp_tools.TOOLS
      + web_control.TOOLS + sleep_mode.TOOLS + relationship.TOOLS)
 
 TOOL_FUNCTIONS = {
@@ -230,6 +231,7 @@ TOOL_FUNCTIONS = {
     **screen_tools.TOOL_FUNCTIONS,
     **media_tools.TOOL_FUNCTIONS,
     **reminder_tools.TOOL_FUNCTIONS,
+    **calendar_tools.TOOL_FUNCTIONS,
     **whatsapp_tools.TOOL_FUNCTIONS,
     **web_control.TOOL_FUNCTIONS,
     **sleep_mode.TOOL_FUNCTIONS,

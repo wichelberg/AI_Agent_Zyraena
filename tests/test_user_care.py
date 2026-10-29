@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -81,11 +82,13 @@ class Sim:
         self.clock = StillClock(datetime(2026, 10, 21, hour, minute))  # 2026-10-21 is a Wednesday
         self.ui, self.guard = FakeUi(), FakeGuard()
         self.sent, self.chats = [], []
+        self.gaming = False  # what the game check says
         self.cfg = user_care.merged(user_care.merged(user_care.DEFAULTS, {"debug": {"telegram": True},
                                                                          "mood": TEST_MOOD}), cfg or {})
         self.care = user_care.Care(self.cfg, user_care.Store(self.folder), self.clock, self.ui, self.guard,
                                    classify=classify, notify=self.sent.append, chat=self.chats.append,
-                                   lang=lambda: "tr", idle=lambda: 0, video=lambda: False)
+                                   lang=lambda: "tr", idle=lambda: 0, video=lambda: False,
+                                   game=lambda: self.gaming)
         self.care.state["mood"] = float(mood)
         self.idle = 0.0
         self.care.tick(idle=0, video=False)
@@ -171,7 +174,7 @@ class BreakTest(unittest.TestCase):
         self.assertEqual(sim.mood(), 55)
         self.assertEqual((sim.care.state["cycle"], sim.care.state["snoozes"], sim.care.state["active"]), (0, 0, 0))
         name, args, kwargs = sim.ui.last("break_window")
-        self.assertEqual(args[0], 600)  # 10 minutes
+        self.assertEqual(args[0], 300)  # 5 minutes (owner, 2026-10-26; was 10)
         kwargs["on_done"]()
         self.assertTrue(wait_for(lambda: sim.sent))
         self.assertIn("Mola bitti", sim.sent[0])
@@ -209,7 +212,7 @@ class BreakTest(unittest.TestCase):
         self.assertFalse(sim.ui.kinds("forced"))
         sim.run(1)
         name, args, kwargs = sim.ui.last("forced")
-        self.assertEqual(args[0], 600)
+        self.assertEqual(args[0], 300)  # 5 minutes
 
     def test_forced_break_done_gives_10_and_resets(self):
         sim = Sim(mood=20)
@@ -251,12 +254,21 @@ class BreakTest(unittest.TestCase):
 
 class AwayTest(unittest.TestCase):
     def test_timers_stop_while_away(self):
-        sim = Sim()
+        sim = Sim(cfg={"break": {"afk_break_minutes": 10}})  # by default 5 min away is already a break
         sim.run(30)
         sim.run(8, idle=True)
         cycle = sim.care.state["cycle"]
         self.assertLess(cycle, 36 * 60)  # 30 active + at most the 5 minutes before counting as away
         self.assertNotIn("afk_break", sim.kinds())
+
+    def test_five_minutes_away_is_a_break(self):
+        sim = Sim()
+        sim.run(50)
+        sim.run(4, idle=True)
+        self.assertNotIn("afk_break", sim.kinds())
+        sim.run(2, idle=True)
+        self.assertEqual(sim.kinds().count("afk_break"), 1)
+        self.assertEqual(sim.care.state["active"], 0)
 
     def test_ten_minutes_away_is_a_break(self):
         sim = Sim()
@@ -291,6 +303,122 @@ class AwayTest(unittest.TestCase):
         sim.care.tick(idle=0, video=False)
         self.assertNotIn("break", sim.care.prompts)
         self.assertNotIn("unanswered", sim.kinds())
+
+
+class GameTest(unittest.TestCase):
+    """In a game (owner, 2026-10-26): never a break prompt or a forced break; an hourly notice, the first
+    free, then -5 each; a 5-minute break after a notice gives +5 and the count starts again."""
+
+    NO_WATER = {"water": {"every_minutes": 600}, "mood": {"drift_per_hour": 0}}  # only the game points move it
+
+    def gaming_sim(self, mood=50):
+        sim = Sim(mood=mood, cfg=self.NO_WATER)
+        sim.gaming = True
+        return sim
+
+    def notices(self, sim):
+        return [c for c in sim.ui.kinds("notice") if c[1][0] == "game"]
+
+    def test_first_hour_is_a_free_notice_then_minus_5_an_hour(self):
+        sim = self.gaming_sim()
+        sim.run(60)
+        self.assertEqual(sim.prompts(), [])
+        self.assertEqual(len(self.notices(sim)), 1)
+        self.assertIn("1 saat", self.notices(sim)[0][1][2])
+        self.assertEqual((sim.mood(), sim.care.state["snoozes"]), (50, 0))
+        sim.run(60)
+        sim.run(60)
+        self.assertEqual(len(self.notices(sim)), 3)
+        self.assertIn("3 saat", self.notices(sim)[-1][1][2])
+        self.assertEqual(sim.mood(), 40)
+        self.assertEqual(sim.care.state["snoozes"], 0)
+        self.assertFalse(sim.ui.kinds("forced"))
+
+    def test_break_after_a_notice_gives_5_and_starts_again(self):
+        sim = self.gaming_sim()
+        sim.run(120)  # free notice, then -5
+        sim.run(6, idle=True)
+        self.assertEqual(sim.kinds()[-2:], ["afk_break", "game_break"])
+        self.assertEqual(sim.mood(), 50)
+        self.assertEqual((sim.care.state["cycle"], sim.care.state["active"], sim.care.state["game_warns"]), (0, 0, 0))
+        sim.run(59)
+        self.assertEqual(len(self.notices(sim)), 2)
+        sim.run(1)
+        self.assertEqual(len(self.notices(sim)), 3)
+        self.assertEqual(sim.mood(), 50)  # the first notice after a break is free again
+
+    def test_a_break_without_a_notice_gives_nothing(self):
+        sim = self.gaming_sim()
+        sim.run(40)
+        sim.run(6, idle=True)
+        self.assertIn("afk_break", sim.kinds())
+        self.assertNotIn("game_break", sim.kinds())
+        self.assertEqual(sim.mood(), 50)
+
+    def test_no_forced_break_in_a_game_even_without_snoozes(self):
+        sim = self.gaming_sim(mood=20)  # angry: 0 snoozes, normally forced at the first hour
+        sim.run(180)
+        self.assertFalse(sim.ui.kinds("forced"))
+        self.assertFalse([c for c in sim.ui.kinds("notice") if c[1][0] == "forced"])
+        self.assertEqual(len(self.notices(sim)), 3)
+
+    def test_game_started_after_the_forced_warning(self):
+        sim = Sim(mood=20, cfg=self.NO_WATER)
+        sim.run(59)
+        self.assertTrue([c for c in sim.ui.kinds("notice") if c[1][0] == "forced"])
+        sim.gaming = True
+        sim.run(2)
+        self.assertFalse(sim.ui.kinds("forced"))
+        self.assertEqual(len(self.notices(sim)), 1)
+
+    def test_prompt_left_open_going_into_a_game_is_no_snooze(self):
+        sim = Sim(cfg=self.NO_WATER)
+        sim.run(60)
+        self.assertEqual(len(sim.prompts()), 1)
+        sim.gaming = True
+        sim.run(6)
+        self.assertNotIn("unanswered", sim.kinds())
+        self.assertEqual((sim.mood(), sim.care.state["snoozes"]), (50, 0))
+        self.assertEqual(len(self.notices(sim)), 1)
+
+    def test_out_of_the_game_the_normal_prompt_comes_back(self):
+        sim = self.gaming_sim()
+        sim.run(60)
+        sim.gaming = False
+        sim.run(60)
+        self.assertEqual(len(sim.prompts()), 1)
+
+
+class GameDetectionTest(unittest.TestCase):
+    class Proc:
+        def __init__(self, exe):
+            self.info = {"exe": exe}
+
+    def detect(self, exes, front=None, fullscreen=False):
+        cfg = dict(user_care.DEFAULTS["game"], fullscreen=fullscreen)
+        procs = [self.Proc(e) for e in exes]
+        with mock.patch("psutil.process_iter", lambda attrs=None: procs), \
+                mock.patch.object(user_care, "_fullscreen_front", lambda: front):
+            return user_care.playing_game(cfg)
+
+    def test_game_folders_and_their_launchers(self):
+        always_on = [r"C:\Program Files (x86)\Steam\steam.exe",
+                     r"C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\wallpaper64.exe",
+                     r"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
+                     r"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\upc.exe",
+                     r"C:\Riot Games\Riot Client\RiotClientServices.exe", None]
+        self.assertFalse(self.detect(always_on))
+        self.assertTrue(self.detect(always_on + [r"E:\SteamLibrary\steamapps\common\Once Human\ONE_HUMAN.exe"]))
+        self.assertTrue(self.detect([r"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\Far Cry 6\bin\FarCry6.exe"]))
+        self.assertTrue(self.detect([r"C:\Riot Games\VALORANT\live\VALORANT.exe"]))
+
+    def test_fullscreen_only_when_turned_on(self):
+        self.assertFalse(user_care.DEFAULTS["game"]["fullscreen"])  # owner: game folders only
+        self.assertFalse(self.detect([], front="someubisoftgame.exe"))
+        self.assertTrue(self.detect([], front="someubisoftgame.exe", fullscreen=True))
+        self.assertFalse(self.detect([], front="opera.exe", fullscreen=True))
+        self.assertFalse(self.detect([], front="vlc.exe", fullscreen=True))
+        self.assertFalse(self.detect([], front=None, fullscreen=True))
 
 
 class WaterTest(unittest.TestCase):
@@ -559,6 +687,11 @@ class PromptAndPeaceTest(unittest.TestCase):
 
 
 class StateAndConfigTest(unittest.TestCase):
+    def test_five_minute_breaks_and_game_points(self):
+        b, points = user_care.DEFAULTS["break"], user_care.DEFAULTS["mood"]["points"]
+        self.assertEqual((b["normal_minutes"], b["forced_minutes"], b["afk_break_minutes"]), (5, 5, 5))
+        self.assertEqual((points["game_hour"], points["game_break"]), (-5, 5))
+
     def test_rough_default_points(self):
         mood = user_care.DEFAULTS["mood"]
         self.assertEqual(mood["snoozes"], {"happy": 2, "normal": 1, "angry": 0})

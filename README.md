@@ -28,7 +28,8 @@ model there can be used.
 | Power | Shut down / restart now, in N minutes or when a script finishes (always with a 60 s warning you can cancel); lock the PC; show CPU/RAM/disk status |
 | Steam | List installed games by size or last played; uninstall one |
 | Health | Watches GPU temperature, RAM, CPU load and free disk space; past a limit (see `.env.example`) she warns you with a popup and on Telegram, with buttons to end the program causing it or leave it. Telegram reminders every minute from minute 3; with no answer by minute 10 and the value still bad, she ends that program herself. A full disk is only reported |
-| Reminders | "Remind me at 9 tomorrow…", repeating alarms, turn alarms on/off; alarms also go to Telegram when you're away from the PC |
+| Reminders | "Remind me at 9 tomorrow…", repeating alarms, turn alarms on/off. A ringing alarm goes to Telegram with Turn off / Snooze 10 min buttons, at once if you're away from the PC (10 min without input), otherwise if it isn't turned off within 2 minutes; after 15 minutes unanswered it goes quiet by itself (the popup stays) |
+| Calendar | "Add these to my plans": the events go into one `.ics` file (each with its own phone alarm) sent on Telegram; tap it on the phone to add them to Outlook. Each one also gets a PC reminder. Only when you ask for your plans/calendar; a plain "set an alarm" stays on the PC. She can read a numbered item of the development plan ("6. maddedeki alarmları planlarıma ekle") and never guesses a time that isn't given |
 | Screen | Take a screenshot to check the result of an action, or send it to you on Telegram |
 | Sleep mode | "Finish this, I'm going to sleep": after one confirmation, Claude Code does the job alone in `Documents\Projects` / `Documents\Work` (if a first attempt fails it investigates and finds its own way). Every project folder is copied to `Documents\Failsafe` before its first change; at the end a detailed report (what changed, what was done and why) is sent on Telegram and saved in the changed folders, then the PC shuts down |
 | WhatsApp | Everything goes through the WhatsApp Desktop app (no browser, no WhatsApp Web): list your chats, read a chat's latest messages (who, when, links, which ones are photos/videos/documents), opening it by name first if needed; send a file to a phone number or to a chat by name ("send the CV in Downloads to +44 7700 900123 on WhatsApp", "Annem'e bu fotoğrafı at"). You see a screenshot of the ready chat and it's sent only after you confirm. Reading is asked first on the PC and on Telegram at once. No contact list is stored |
@@ -336,10 +337,11 @@ her mood, slips cost a lot.
 |---|---|---|
 | Break prompt | Every 60 min of active use: "Mola ver" / "Ertele" | +2 / -15 |
 | Unanswered | 5 min without an answer while you use the PC counts as a snooze (just being away doesn't) | -20 |
-| Forced break | When the snoozes in a row run out (happy 2, normal 1, angry 0): "save" 2 min before, then a fullscreen 10 min countdown with no close button. Nothing blocks the keyboard or mouse; the emergency exit needs a written reason she remembers | +5 done / -30 exit |
+| Forced break | When the snoozes in a row run out (happy 2, normal 1, angry 0): "save" 2 min before, then a fullscreen 5 min countdown with no close button. Nothing blocks the keyboard or mouse; the emergency exit needs a written reason she remembers | +5 done / -30 exit |
 | Break over | A Telegram message in her voice | |
 | Water | Every 60 min of active use: "İçtim" / "Sonra" (back in 15 min) | +1 / -3 |
-| Away | 5 min without input stops the timers (not while a fullscreen video plays); 10 min away, or the PC sleeping, counts as a break | 0 |
+| Away | 5 min without input stops the timers (not while a fullscreen video plays) and counts as a break, and so does the PC sleeping | 0 |
+| Game | While a game runs (a program from a Steam / Epic / Ubisoft / Riot / EA / GOG / Xbox games folder, launchers and Wallpaper Engine excluded; `game.fullscreen` would also count fullscreen windows, off) no break prompt and never a forced break: every 60 min a "you've been playing N hours" notice that doesn't take the focus. The first is free, each later one -5; a 5 min break after a notice +5, and the count starts again | 0 / -5 / +5 |
 | Night | 00:00-06:00: a sleep warning every hour | -15 |
 | 03:00 | She opens the text box and asks why you're up; Gemini Flash sorts the answer: work / exam / emergency (accepted twice a week: warnings stop tonight), can't sleep (gentle, never shuts down), no reason (or no answer in 10 min): step-by-step shutdown | |
 | Shutdown | "Save" 5 min before (2 when angry), a countdown, the last 60 s fullscreen; cancel with a reason in the window, `/iptal` on Telegram or `shutdown /a` | -30 cancel |
@@ -458,7 +460,8 @@ Older `HANNAH_*` setting names (the project's former name) are still accepted.
 | `web_control.py` | Opera GX through the Zyraena Web Control extension |
 | `sleep_mode.py`, `sleep_hook.ps1` | Sleep mode: backups, the unattended Claude Code job, report, shutdown. `python sleep_mode.py start/finish` runs the same mode inside an interactive Claude Code session (with the global hook `~/.claude/hooks/zyraena_sleep_gate.py`) |
 | `screen_tools.py`, `media_tools.py` | Screenshots; media keys and volume |
-| `reminder_tools.py`, `config_loader.py`, `check_event.py`, `alert.py` | Alarms and reminders |
+| `reminder_tools.py`, `config_loader.py`, `check_event.py`, `alert.py`, `alarm_ring.py` | Alarms and reminders; one ringing alarm on the PC and Telegram |
+| `calendar_tools.py` | Plans to the phone's calendar (.ics on Telegram) + PC reminders |
 | `telegram_listener.py` | Telegram via claude_comm |
 | `claude_bridge.py` | `/c` → headless Claude Code |
 | `wake.py` | The "Zyraena açıl" wake phrase |

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-import alert
+import alarm_ring
 import clock_logger
 from config_loader import add_interval
 
@@ -32,7 +32,7 @@ def is_event(config, stop_event):
             break
 
         print(f"Event '{config.name}' triggered at: {current_time}")
-        alert.trigger_alert(config.name, config.sound)
+        alarm_ring.ring(config.name, config.sound)
         if not config.loop:
             break
 

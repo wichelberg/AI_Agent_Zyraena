@@ -1,9 +1,10 @@
 ZYRAENA — GELİŞTİRME PLANI KAYITLARI
 ====================================
-Burada sonra yapılacak işler durur. Bir iş başlayınca durumunu güncelle, bitince
-tarihiyle "BİTTİ" yaz ve ne yapıldığını bir iki satırla ekle.
+Burada sonra yapılacak işler durur. Bir iş başlayınca durumunu güncelle. Bitince durumu tarihiyle
+"BİTTİ" yap, ne yapıldığını bir iki satırla ekle ve maddeyi finished_logs.txt'e taşı (numarası
+aynı kalır; yeni madde en büyük numaradan devam eder).
 
-Durumlar: BEKLİYOR (sırada, yapılmadı) · DEVAM EDİYOR · BİTTİ
+Durumlar: BEKLİYOR (sırada, yapılmadı) · DEVAM EDİYOR · BİTTİ (-> finished_logs.txt)
 
 
 ----------------------------------------------------------------------------
@@ -54,206 +55,25 @@ Bakılacaklar:
 
 
 ----------------------------------------------------------------------------
-4) API kredi kaydı (Ctrl+F1 > "API kredi kaydı" / Krediler sekmesi)
-   Eklendi: 2026-10-21 · Durum: BİTTİ (2026-10-21, kuruldu 09:30)
+8) Zyraena için mobil uygulama: telefona doğrudan erişim
+   Eklendi: 2026-10-25 · Durum: BEKLİYOR (fikir, sahip "gelecekte" dedi)
 ----------------------------------------------------------------------------
-- credit_log.py: sahibin her isteği bir kayıt (yazı kutusu, Telegram, sesli sohbet, bulutta ses tanıma,
-  disk taramasının Gemini sorusu). OpenRouter'ın her istek için bildirdiği maliyet + token + çağrılan
-  araçlar; isteklerden önce ve sonra OpenRouter bakiyesi, fark; Tavily kredisi önce/sonra.
-  %LOCALAPPDATA%\Zyraena\credit_log.sqlite (ZYRAENA_CREDIT_LOG).
-- Ölçüm: OpenRouter /credits bakiyeyi ~1 dk geç düşüyor (36 sn'de değişmemiş, ~70 sn'de bildirilen maliyet
-  kadar düşmüş, birebir). "Sonra" 10 sn / 60 sn / 3 dk'da okunuyor, yansıyınca duruyor. Aynı anda başka
-  istek olursa kayıt "*" ile işaretleniyor (fark ikisini de içerir).
-- "Önce" okuması her mesaja ~0,3 sn ekliyor (4 sn zaman aşımı).
-- credit_panel.py: bugün/7/30 gün toplamları, kaynağa göre dağılım, liste (zaman, kaynak, ne için, model,
-  istek, maliyet, önce, sonra, fark), satır seçilince istek istek ayrıntı. Testler: tests\test_credit_log.py.
+Sahibin isteği (2026-10-25, .ics takvim testi çok iyi çalışınca): ileride Zyraena'nın bir mobil
+uygulaması olsun; telefona doğrudan erişimi olursa işler çok kolaylaşır.
 
-----------------------------------------------------------------------------
-3) Disk yönetimi: kopya venv'ler ve diski en verimli kullanma
-   Eklendi: 2026-10-20 · Durum: BİTTİ (2026-10-21, uyku modu; kurulu exe'ye kurulmadı, dist\'te)
-----------------------------------------------------------------------------
-Yapılanlar (2026-10-21):
-- _MEI sızıntısı: Zyraena açılırken (main._clean_mei -> disk_actions.clean_mei) Temp'teki kendi
-  _MEIPASS'i dışında, base_library.zip içeren, en az 1 saatlik ve kullanımda olmayan _MEI* klasörlerini
-  siler. "Kullanımda" = içindeki bir dosya yazmaya açılamıyor (yüklü DLL/pyd) ya da klasör yeniden
-  adlandırılamıyor. (Sadece rename testi yetmiyor: yüklü DLL'i olan klasörü Windows yeniden adlandırıyor.)
-  Gerçek Temp'te kuru çalıştırma: 48 klasör / 6,5 GB silinecek, 1 tanesi (çalışan Zyraena) atlanıyor.
-  base_library.zip'i olmayan 61 eski kalıntı (toplam 14 MB) kurala uymadığı için kalıyor.
-- disk_tools.py: tarayıcı (sadece okur). Tüm C:'yi tek geçişte gezer (klasör başına tek handle,
-  GetFileInformationByHandleEx; ~20 sn / 222 bin klasör / 1,5 milyon dosya), her klasörü onu içeren en
-  derin öğeye yazar. Gerçek ayrılmış boyut, hardlink'ler dosya kimliğiyle bir kez sayılır (23 GB tekrar
-  sayılmadı). Öğeler: Steam oyunları (acf + localconfig LastPlayed), Steam kalıntıları (manifest'siz
-  common klasörleri, depot ve atölye indirmeleri), Uninstall programları, temel Python'lar (python.org
-  kaldırıcısıyla birleşik), venv'ler (pyvenv.cfg, dist-info, .pth), önbellekler (pip, uv, HF model bazında,
-  torch, npm, DXCache, Temp, _MEI, CrashDumps, VS Code, Vortex), projeler, kendi klasörlerim, bilinmeyen
-  büyük klasörler (en büyük exe'nin sürüm bilgisi), C: kök dosyaları (pagefile/hiberfil).
-- Son kullanım kaynakları: Steam LastPlayed / Prefetch (okunabiliyorsa; bu PC'de yönetici izni gerekiyor,
-  okunamıyor) / son git commit / en yeni dosya. Kaynağı her satırda yazıyor.
-- Bağımlılık grafiği: venv->home Python, venv->.pth hedefi, kısayol/Run/zamanlanmış görev->exe, proje
-  kodundaki model kimliği->HF önbelleği, Zyraena->ses klasörleri ve Wichelberg. Silme onayında "birlikte
-  gidenler" ve "bunlar bozulur" listesi; silmeden sonra grafik yeniden hesaplanıyor, kırılan öğe kırmızı
-  "bağımlılık yok". Gerçek taramada bulunan kırık: \Hannah zamanlanmış görevi (Hannah.exe yok).
-- Korunanlar (silme butonu yok): Windows, sistem bileşenleri/sürücüler, %LOCALAPPDATA%\Zyraena\voice,
-  egitim venv, .pth ile bağlanılan her venv, Failsafe, çalışan Zyraena'nın _MEI'si, kurulu Zyraena,
-  korunan bir öğenin içindeki her şey. Ayrıca disk_actions.check_path son güvenlik ağı.
-- disk_memory.py: knowledge.json (elle düzenlenebilir; kimliğe göre; kaynak kural/exe/gemini/sahip),
-  history.sqlite (tarama başına öğe boyutu + son kullanım), cache.json, last_scan.json.
-  Yer: %LOCALAPPDATA%\Zyraena\disk (ZYRAENA_DISK_HOME). Önce hafıza, sonra Gemini Flash
-  (ai_assistant.ask_flash), 25'li toplu istek, sadece ad + birkaç dosya adı gider.
-- disk_watch.py: günde bir kez, PC 10 dk boştayken düşük öncelikli tarama; eşik aşılırsa pet balonu
-  "Disk: yeni bulgular var" (tıklayınca Disk sekmesi), aynı bulgu bir kez söylenir. Eşikler .env:
-  ZYRAENA_DISK_GROW_GB=2, ZYRAENA_DISK_FREE_GB=150, ZYRAENA_DISK_STALE_DAYS=60, ZYRAENA_DISK_STALE_GB=10,
-  ZYRAENA_DISK_MEI_COUNT=3, ZYRAENA_DISK_IDLE_MINUTES=10, ZYRAENA_DISK_WATCH=off.
-- Ctrl+F1 panelinde Genel / Disk sekmeleri (disk_panel.py): boş/dolu çubuğu, sıralanır/filtrelenir liste,
-  ayrıntı, türe göre Sil (oyun steam://uninstall, program kendi kaldırıcısı, pip/uv kendi komutu, venv/
-  önbellek/model kalıcı, Temp bir günden eski dosyalar, kendi dosyalarım/projeler/bilinmeyen klasörler
-  Geri Dönüşüm Kutusu; kutuya sığmayacaksa reddeder), zaman çizelgesi, bu hafta en çok büyüyenler.
-  Sıkıştırma butonu yok.
-- Testler: tests\test_disk_tools.py, test_disk_actions.py, test_disk_memory.py, test_disk_panel.py
-  (53 test, sahte disk ağacında; toplam 246 test geçiyor).
+Bugün telefona erişim sadece Telegram üzerinden: mesaj, buton, dosya (.ics'e dokunup takvime ekleme gibi
+bir adım hep sahibe kalıyor).
 
-Kurulumdan sonra bulunan hatalar (2026-10-21 sabah, düzeltildi ve yeniden kuruldu 08:49):
-- Panel boş açılıp donuyordu: disk_panel'deki StringVar'lar master'sız olduğu için petin Tk köküne
-  (başka thread) bağlandı; pet o sırada pencere başlıklarını okurken iki thread kilitlendi (py-spy ile
-  bulundu). StringVar(win, ...) yapıldı; test eklendi.
-- Sil onay penceresi panele tıklayınca panelin arkasında kalıyordu: açıkken 250 ms'de bir öne alınıyor.
-- "Geri Dönüşüm Kutusu" ile silinen Belgeler\Paradox Interactive (10,8 GB) kutuda bulunamadı. send2trash
-  (SHFileOperation, FOF_NOCONFIRMATION, nuke uyarısı yok) kutuya sığmayanı sormadan kalıcı silebiliyor ve
-  benim kontrolüm kutunun boş yerine değil toplam boyutuna bakıyordu. Artık kendi SHFileOperationW çağrımız:
-  önce kutudaki boş yer ölçülür (sığmazsa hiçbir şey yapılmaz), FOF_WANTNUKEWARNING açık, sonra öğenin
-  kutuda olduğu $I dosyasından doğrulanır, değilse açıkça söylenir.
+Uygulamayla doğrudan yapılabilecekler (fikir listesi, sırası sahibin):
+- Takvim: olayları telefon takvimine dokunmadan yazmak (Android CalendarContract / iOS EventKit), alarmlar. -> Aynen oyle ben dedigimde direk yazdirmani istiyorum, tiklama yapmama gerek kalmasin.
+- Alarm: telefonda gerçek alarm kurmak; PC alarmını telefonda çaldırmak ve oradan kapatmak (bugün Telegram). -> Telefonda o konuda total kontrol istiyorum hani senden bana plan verebilir misin dedigimde benle konusup anlastiktan sonra alarm olur calendar plani olur herseyi ayarlamani istiyorum. 
+- Bildirimler: Telegram yerine kendi bildirimleri (butonlu), sesli/yazılı sohbet, pet/mood göstergesi. -> UI tamamiyle sende Zyraena, cunku proje acisindan Digelim claude code proje konusmalari ile normal benim verecegim task islemelrini sen ayarlayabilirsin.
+- PC ile bağlantı: güvenli bir kanal (bugünkü Telegram bot yolu ya da kendi sunucusu / yerel ağ). -> Hollanda da aktif calisan bir sunucu var arkadasima ait. Oradan globalde aktif baglanti olan bir versiyon istiyorum.
 
-Kalanlar / sonraki adımlar:
-- Kurulum: yapıldı (2026-10-21 08:25, düzeltmeli sürüm 08:49).
-- Prefetch okunamıyor (yönetici izni); programların son kullanımı şimdilik "en yeni dosya". İstenirse
-  yönetici izniyle çalışan küçük bir görevle Prefetch zamanları bir dosyaya yazdırılabilir.
-- base_library.zip'i olmayan eski _MEI kalıntıları (14 MB) kural gereği silinmiyor.
-- Kök sebep: build.ps1'de --onefile. --onedir'e geçmek sızıntıyı tamamen bitirir (karar sahibin).
-- Gemini tahminleri bazen yanılıyor (ör. Vortex klasörüne "önbellek" diyor, içinde mod deposu var);
-  bu yüzden tahmin silme şeklini asla belirlemiyor. Yanlış olanları knowledge.json'da "owner" ile düzelt.
-- Eşikleri panelden değiştirme yok, .env'den.
-
-Eski not (2026-10-20):
-Sahibin isteği: PC'deki bütün venv'leri kontrol edip kopya olanları bulmak, diski taramak,
-"burada şu dosyalar var, bunlar gereksiz görünüyor" diye rapor vermek; diski olabilecek en
-verimli şekilde kullanmayı sağlamak.
-
-Elde olan eski kod (projede DiskManagement\ klasörü, sahibin koyduğu, 2026-08-25):
-- pc_temizlik.py: önce tarayıp rapor çıkaran, onaydan sonra silen temizlik aracı
-  (klasör boyutları, atlanacak yollar, pip analizi).
-- stutter_tani.py: takılma tanısı için CPU/RAM/disk izleyicisi (Masaüstüne CSV yazar).
-Bunlar başlangıç noktası; Zyraena'ya bir araç olarak taşınacak.
-
-Dikkat edilecekler:
-- Önce SADECE rapor; hiçbir şey sormadan silinmez (her silme onaylı, Geri Dönüşüm Kutusu'na).
-- Wichelberg'in eğitim venv'i (Documents\Projects\Wichelberg_VoiceChanger\data\egitim\venv)
-  Zyraena'nın voice_env / tts_env katmanlarının bağımlılığı: kopya gibi görünse de SİLİNMEZ.
-  Aynı şekilde %LOCALAPPDATA%\Zyraena\voice altındaki ortamlar ve modeller.
-- Kopya venv tespiti: aynı Python sürümü + aynı paket listesi (pip freeze / site-packages
-  karşılaştırması), boyut, son kullanım tarihi; birleştirme yerine "hangisi kullanılıyor"
-  bilgisiyle öneri.
-- Büyük önbellekler: pip, HuggingFace, torch, npm, Blender, PyInstaller build/dist, Temp.
-
-----------------------------------------------------------------------------
-5) User Care: mola, su, uyku ve Zyraena'nın mood'u
-   Eklendi: 2026-10-24 · Durum: BİTTİ (2026-10-24, kaynakta; exe'ye kurulmadı, DRY_RUN açık)
-----------------------------------------------------------------------------
-Kişiliğin üstünde bir mood katmanı (ayrı kişilik değil). Ayarların hepsi config.json "user_care".
-- Dosyalar: user_care.py (kurallar, mood, durum, debug saati), care_guard.py (koruma listesi),
-  care_windows.py (uyarılar, mola penceresi, tam ekran zorunlu mola / son 60 sn), care_panel.py
-  (Ctrl+F1 > Bakım sekmesi + "Koruma ayarları…" penceresi). ai_assistant: mood bloğu sadece lady
-  moduna her mesajda eklenir; care_make_peace aracı (özür/söz +10, 2 saatte bir, günde 2); sohbet
-  kutusunu Zyraena'nın mesajıyla açma (03:00, sabah özeti); 03:00 cevabı Gemini Flash ile sınıflanır.
-  system_tools.cancel_hooks: Telegram /iptal User Care'in kapatmasını da durdurur.
-- Kararlar (sahiple, 2026-10-24): mood sadece lady'de, varsayılan mod assistant kalır; koruma sadece
-  User Care'in kapatmasını engeller (uyku modu ve elle istenen kapatma aynen); GPU kuralı = %80 VE yük
-  compute/cuda motorunda (oyun 3d'de, sayılmaz); kuralların hepsi açık: programlar (claude, blender,
-  Unity, Movavi VideoEditorPlus, rsession, yt-dlp), terminal işi, eğitim projeleri, Zyraena'nın
-  script'leri, yoğun CPU, indirmeler. Bakım sekmesinden canlı açılıp kapanır.
-- Benim boşluk kararlarım: cevapsız uyarı sadece kullanıcı PC'yi kullanırken -10 (uzaktaysa ceza yok,
-  10 dk olunca mola sayılır); "Mola ver" tıklanınca +5, 10 dk geri sayım, bitince Telegram; su "Sonra"
-  15 dk; "uyuyamıyorum" gecesi uyarılar devam eder ama cezasız; 03:00'te 10 aktif dk cevap yoksa keyfi;
-  haftalık sayaç pazartesi sıfırlanır; yatış = 22:00 sonrası başlayan en az 4 saatlik girdi boşluğu.
-- Uyku tespiti: iki kontrol arasında 120 sn+ zaman atlaması (Modern Standby'da süreç donuyor);
-  donmazsa zaten girdi olmadığı için AFK yolundan mola sayılıyor.
-- Debug: py -3 user_care.py --debug --at 02:58 --active 178 --mood 25 --speed 30 (ayrı durum dosyası,
-  her seferinde temiz, asla kapatmaz, Telegram'sız). Bakım sekmesinde saat/AFK/uyku/mood butonları.
-- Doğrulama: tests	est_user_care.py (51 test, sahte saat). Gerçek modellerle uçtan uca debug koşusu:
-  03:00 sorusu kişilikle geldi, "dizi izliyorum" keyfi sınıflandı, kademeli kapatma DRY_RUN ile sonuna
-  kadar gitti, pencereden sebepli iptal -20 ile kaydedildi; claude.exe çalışırken kapatma yerine zorunlu
-  mola geldi.
-
-Kalanlar:
-- Kurulum: exe yeniden derlenmedi (build.ps1) ve Apps\Zyraena'ya kurulmadı.
-- DRY_RUN açık; gerçek kapatma için config.json'da "dry_run": false (sahip söyleyince).
-- Tam ekran zorunlu mola exclusive-fullscreen oyunların altında kalabilir (borderless'ta üstte).
-- Tüm test takımı tek süreçte koşunca "Tcl_AsyncDelete" ile çöküyor; bu HEAD'de de var (benden önce),
-  dosya dosya koşunca geçiyor.
-
-=== 2026-10-24 (uyku modu) Pet: mood'a göre animasyonlar ===
-Aşama 1 (A: sinirli + motor + testler) BİTTİ:
-- Yeni sprite'lar (eskilerine dokunulmadı, --only ile ayrı klasörler): angry_in (20, takipli, sağ bot
-  sabit), angry_idle (50 pingpong: geniş duruş, yumruklar belde, dirsekler dışarı, çene yukarı, ağır nefes,
-  ışık x1.35 ve yarım döngüde 3 nabız), angry_talkin (10) + angry_talk (30: işaret parmağı havada, döngüde
-  iki kez sana doğru vurgu), angry_sitdown (20) + angry_sit (50 pingpong: tahtın sağ köşesine yaslanmış,
-  bacaklar açık ve öne uzanmış, yumruk çenede, sol el kol dayanağında parmakları serçeden işarete tıkırdatır).
-- Pozlar sayısal çözüldü (koordinat inişi): eller bel kenarına (bel genişliği ölçülerek), tabanlar düz
-  (eğim < 1 mm), taht kutularıyla gövde noktaları çakışma sayımı. Taht çakışması sadece oturakta 2.7 cm
-  (mevcut sit ile aynı, kalça sıkışması); mevcut sit'te önkollar dayanağa 6 cm gömülü, yenide 0.
-- zyraena_real.py: apply_pose'a "LX/LY/LZ" (kemiğin kendi ekseninde dönüş; parmak bükümü el nasıl
-  tutulursa tutulsun doğru), above_floor() (oturma geçişinde bot zemine girmesin: mevcut sitdown'da
-  14.7 cm giriyordu, yenilerde 0), TRACK_FOOT (geçişte basan ayak sabit: iki ayak yerdeyken temas
-  ayağı değişip bot kayıyordu), mouth() (konuşma ağız/kafa ortak).
-- desktop_pet.py: ENTRIES/POSE_OF poz ağacı + _bridge: iki poz arası yol otomatik oynar (sinirli
-  duruştan yürümeye, oturmaya, başka poza geçerken önce duruştan çıkar). Mood user_care.service().tone()
-  ile 5 sn'de bir, lazy import (User Care yoksa eski davranış). Seviye değişince dururken/otururken
-  (_settle_mood) geçiş oynar; tahttaysa kalkıp yeni tarzda oturur. Kare yoksa MOOD_FALLBACK ile eskiye
-  düşer. angry_talk döngüsünü bitirip eli indirir (FINISH_LOOPS). MOOD_PASTIMES (sinirli: hançer/dambıl
-  x2, esneme x0.3). Testler: tests/test_pet_mood.py (12), test_pet_motion (7) geçiyor.
-Aşama 2 (C: ekstralar) BİTTİ:
-- impatientin (14, takipli) + impatient (40 döngü): kollar kavuşuk, çene yukarı, sol bot yarım döngüde dört
-  kez burnunu kaldırıp yere vurur (bot eğimi fazladan ayak dönüşünden geri alınır). Motor: POSES'a
-  "impatient"; User Care olay listesinde yeni bir snooze/unanswered (2 dk içinde) görünce, dururken/
-  otururken/bir pozdayken kalkıp bu poza geçer ve pet_lines_impatient'tan bir laf eder (i18n TR/EN);
-  yürüyorsa durana kadar bekler (en çok 2 dk).
-- worried_in (14, takipli) + worried (40 pingpong): kollar kendine sarılı (eller karşı bel yanlarında,
-  önkollar göğüs altında çaprazlanır), baş eğik, ışık x0.45. tone()=="worried" (gece, düşük mood). Kendi
-  talk'u yok (aynı pozda kalır), tahtta normal_sit'e düşer.
-- angry_in yeniden render: adım büyütüldü (bot 5 cm kalkıyor), iz sağ bota sabit; iz artık tekdüze
-  (önce 10-14. karelerde 12 px geri dönüyordu = bot kayması).
-- PASTIMES ağırlıkları (render yok) Aşama 1'de motorla birlikte yapıldı.
-Aşama 3 (B: normal) BİTTİ:
-- normal_in (20, takipli, sağ bot sabit, iz 0 -> 14.8 px tekdüze), normal_idle (50 pingpong: dik, ayaklar
-  yakın, eller arkada kenetli, çene hafif yukarı, ışık x0.85), normal_talk (30: aynı duruşta ağız/kafa;
-  ilk karesi normal_idle'ın ilk karesiyle aynı nefeste), normal_sitdown (20) + normal_sit (50 pingpong:
-  resmi, dik sırt (taht arkasıyla çakışma 0), iki önkol dayanaklarda, dizler bitişik, bacaklar eğik
-  zemine; tabanlar z 0.000).
-- Önce/sonra görseli: idle / angry_idle / normal_idle ve sit / angry_sit / normal_sit yan yana.
-Aşama 4 (derleme + kurulum) BİTTİ (05:02):
-- build.ps1 -> dist\Zyraena.exe (250 MB; önceki 183 MB, yeni ~478 kare). Eski exe:
-  Apps\Zyraena\Zyraena_before_mood_anims_2026-10-24.exe; eski sprite'lar + orijinal betik/parametreler:
-  pet\backup_before_mood_anims_2026-10-24.
-- Yeni exe başlatıldı: pet penceresi açık, Apps\Zyraena\config.json'da user_care bölümü oluştu (dry_run
-  true), Care state.json yazıldı. Mood 50 (normal) iken pet canlıda resmi tahta oturuşa (normal_sit) geçti.
-- Tüm test dosyaları tek tek OK (22 dosya; test_pet_mood 12, test_pet_motion 7, test_user_care 52).
-Kalanlar / not:
-- Sinirli/endişeli/sabırsız canlıda görülmedi (mood şu an 50); Ctrl+F1 > Bakım'daki mood butonlarıyla ya
-  da debug komutuyla denenebilir.
-- Mevcut sitdown'da bot geçiş sırasında 14.7 cm zemine giriyor (dokunmama kararı yüzünden düzeltilmedi;
-  yenilerde above_floor ile 0). İstenirse sitdown yalnız --only sitdown ile yeniden render edilir.
-
-=== 2026-10-24 09:30 Mood puanları sertleşti + replikler mood'a göre ===
-- Puanlar (user_care DEFAULTS, config.example.json, kurulu Apps\Zyraena\config.json): erteleme -15 (önce -5),
-  cevapsız -20, mola +2, su +1, su "sonra" -3 (yeni), zorunlu mola bitti +5, acil çıkış -30, uyku uyarısı -15,
-  zamanında yatış +10, barışma +5, kapatma iptali -30, geri dönüş saatte 1. Erteleme hakkı: mutlu 2, normal 1,
-  sinirli 0 (zaten böyleydi). Kural testleri eski sabit sayılarla (TEST_MOOD), yeni varsayılanlar ayrı testte.
-- Replikler (i18n.py, MOOD_LINES): pet lafları pet_lines[_poz]_mood (mutlu: sahiplenici/anaç, "canım",
-  "good boy"; normal: nötr, hafif dominant, {user} ile isimle, emir veren; sinirli: öfkeli, sadist,
-  cezalandırmayı seven, aşırı dominant/sahiplenici; gece endişeli). Her mood'da eskinin 2 katı (genel 16, kod
-  12, izleme 8, diğerleri 6). User Care mesajları her ton için 2 varyant, rastgele seçiliyor (toned()).
-  "küçük olan" hiçbir yerde yok (personality.md'de de yasak). Lady modunun ton tarifi i18n.PERSONA_TONES.
-  {user} = ZYRAENA_USER_NAME, yoksa i18n.USER_FALLBACK.
-- GitHub: i18n.example.py (aynı anahtarlar, yumuşak örnek satırlar) commit'lenecek; i18n.py .gitignore'da.
-  README kurulumuna "copy i18n.example.py i18n.py" eklendi. i18n.py daha önce takip edildiği için bir kez
-  `git rm --cached i18n.py` gerekiyor (git işlerini sahibi yapıyor).
-- Kurulum 09:30: eski exe Zyraena_before_mood_lines_2026-10-24.exe. Testler dosya dosya OK.
+Karar verilecekler (başlamadan önce sahibe sorulacak):
+- Telefon Android mi iPhone mu (iOS izinleri ve dağıtım çok daha kısıtlı)? -> Telefon Android, Ozellikle samsung S24 FE
+- Ne ile: yerli (Kotlin/Swift), çapraz platform (Flutter / React Native) ya da önce PWA. -> Android Studio yada Flutter sana kalmis ama Android Studio tecrubem daha fazla.
+- PC ile nasıl konuşacak: Telegram köprüsü kalsın mı, yoksa doğrudan bağlantı mı (uzaktayken erişim,
+  güvenlik, kimlik doğrulama)? -> Telegram koprusunden cok emin degilim, Arkadasimin hollanda uzerinden calisan bir serveri var. Onun uzerinden bir iletisim yapisi yapmayi planliyorum sende ayri fikir olursa bilgilendirirsin. 
+- Hangi izinler kabul: takvim, alarm, bildirim, mikrofon, konum?
+- Kural: konuşma için ücretli servis yok (no-paid-speech); ses yerel kalır. -> Ses yerel kalacak ve aslinda gecen gunlerde QWEN'LLM modelini localde kullanan bir developer gordum bunu yapma mumkun mu cok merak ediyorum.

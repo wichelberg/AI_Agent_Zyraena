@@ -112,7 +112,13 @@ STRINGS = {
         "openrouter_credits": "💳 OpenRouter credit left: ${remaining:.2f}",
         "openrouter_estimate": "≈ {messages} more messages at the recent average (${average:.4f} per message, last {count} messages).",
         "openrouter_credits_failed": "Couldn't read the OpenRouter credit balance.",
-        "alarm_remote": "⏰ {name}",
+        "alarm_ringing": "⏰ Alarm ringing on the PC: {name} ({time})",
+        "alarm_button_close": "🔕 Turn off",
+        "alarm_button_snooze": "⏰ Snooze {minutes} min",
+        "alarm_silenced": "🔇 '{name}' rang for {minutes} minutes with no answer, so I muted it. The popup is still open on the PC; the buttons above still work.",
+        "alarm_closed_pc": "✓ Turned off on the PC ({time})",
+        "alarm_closed_remote": "🔕 '{name}' is off.",
+        "alarm_snoozed": "⏰ '{name}' snoozed for {minutes} min. It rings again at {time}.",
         "screenshot_caption": "📸 Screen",
         "voice_confirm": "🎤 This is what I understood:\n\n“{text}”\n\nShall I do it?",
         "voice_declined": "Okay, I won't do it. Say it again (or type it) and I'll try once more.",
@@ -278,7 +284,13 @@ STRINGS = {
         "openrouter_credits": "💳 Kalan OpenRouter kredisi: ${remaining:.2f}",
         "openrouter_estimate": "≈ {messages} mesaj daha yeter (son {count} mesajın ortalaması: mesaj başına ${average:.4f}).",
         "openrouter_credits_failed": "OpenRouter kredisi okunamadı.",
-        "alarm_remote": "⏰ {name}",
+        "alarm_ringing": "⏰ PC'de alarm çalıyor: {name} ({time})",
+        "alarm_button_close": "🔕 Kapat",
+        "alarm_button_snooze": "⏰ {minutes} dk ertele",
+        "alarm_silenced": "🔇 '{name}' {minutes} dakikadır çalıyordu, cevap gelmedi; sesini kapattım. Popup PC'de açık, yukarıdaki butonlar hâlâ çalışıyor.",
+        "alarm_closed_pc": "✓ PC'den kapatıldı ({time})",
+        "alarm_closed_remote": "🔕 '{name}' kapatıldı.",
+        "alarm_snoozed": "⏰ '{name}' {minutes} dk ertelendi. Yeniden çalma saati: {time}.",
         "screenshot_caption": "📸 Ekran",
         "voice_confirm": "🎤 Şunu anladım:\n\n“{text}”\n\nBunu yapayım mı?",
         "voice_declined": "Tamam, yapmıyorum. Tekrar söyle ya da yaz, yeniden deneyeyim.",
@@ -803,6 +815,9 @@ STRINGS["en"].update({
     "care_ev_forced_done": "finished the forced break",
     "care_ev_emergency_exit": "left the forced break by the emergency exit",
     "care_ev_afk_break": "away for {minutes} min (counts as a break)",
+    "care_ev_game_reminder": "played {hours} h without a break (game reminder)",
+    "care_ev_game_break": "took a break after the game reminder",
+    "care_game_title": "Game break",
     "care_ev_sleep": "PC asleep for {minutes} min (counts as a break)",
     "care_ev_water": "drank water",
     "care_ev_water_later": "put off the water",
@@ -953,6 +968,9 @@ STRINGS["tr"].update({
     "care_ev_forced_done": "zorunlu molayı tamamladı",
     "care_ev_emergency_exit": "zorunlu moladan acil çıkışla çıktı",
     "care_ev_afk_break": "{minutes} dk uzaktaydı (mola sayıldı)",
+    "care_ev_game_reminder": "{hours} saattir molasız oynadı (oyun uyarısı)",
+    "care_ev_game_break": "oyun uyarısından sonra mola verdi",
+    "care_game_title": "Oyun molası",
     "care_ev_sleep": "PC {minutes} dk uykudaydı (mola sayıldı)",
     "care_ev_water": "su içti",
     "care_ev_water_later": "suyu erteledi",
@@ -1195,6 +1213,22 @@ MOOD_LINES = {
         "care_break_prompt_worried": [
             "{minutes} minutes at the screen. Time for a break."
         ],
+        "care_game_prompt_happy": [
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+        ],
+        "care_game_prompt_normal": [
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+        ],
+        "care_game_prompt_angry": [
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+        ],
+        "care_game_prompt_worried": [
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+            "You've been playing for {hours} h. Take a 5-minute break when the match ends.",
+        ],
         "care_forced_text_happy": [
             "No more snoozing. {minutes} minutes away from the screen."
         ],
@@ -1346,6 +1380,22 @@ MOOD_LINES = {
         ],
         "care_break_prompt_worried": [
             "{minutes} dakikadır ekrandasın. Mola zamanı."
+        ],
+        "care_game_prompt_happy": [
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+        ],
+        "care_game_prompt_normal": [
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+        ],
+        "care_game_prompt_angry": [
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+        ],
+        "care_game_prompt_worried": [
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
+            "{hours} saattir oynuyorsun. Maç bitince 5 dakika mola ver.",
         ],
         "care_forced_text_happy": [
             "Erteleme hakkı bitti. {minutes} dakika ekrandan uzak dur."

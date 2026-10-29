@@ -188,7 +188,8 @@ TOOLS = [
     ),
     _tool(
         "add_reminder",
-        "Adds a reminder that rings on the PC (popup + sound; also sent to Telegram if the user is away). "
+        "Adds a reminder that rings on the PC (popup + sound; also sent to Telegram with Turn off / Snooze "
+        "buttons if the user is away or it isn't turned off within 2 minutes; it goes quiet by itself after 15). "
         "Give `at` or `in_minutes`; times are the PC's local time (the current time is in the system prompt).",
         {
             "text": {"type": "string", "description": "What to remind about; shown as the reminder's name."},

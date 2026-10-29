@@ -22,7 +22,6 @@ from datetime import datetime
 from pathlib import Path
 
 import ai_assistant
-import alert
 import claude_bridge
 import i18n
 import pc_tools
@@ -38,8 +37,6 @@ RESET_COMMANDS = ("/yeni", "/new")
 CANCEL_COMMANDS = ("/iptal", "/cancel")
 SCREENSHOT_COMMANDS = ("/ss", "/ekran")
 CREDIT_COMMANDS = ("/kredi", "/credits")
-# Alarms also go to Telegram when there was no keyboard/mouse input for this long.
-AWAY_IDLE_SECONDS = 10 * 60
 CHAT_IDLE_RESET_SECONDS = 60 * 60
 CONFIRM_TIMEOUT_SECONDS = 10 * 60
 ERROR_BACKOFF_SECONDS = 15
@@ -79,7 +76,6 @@ def start():
         return
     _link.update(comm=comm, backend=backend)
     pc_tools.fallback_notify = lambda text: _send(backend, text)
-    alert.remote_hook = lambda name: _alert_if_away(backend, name)
     threading.Thread(target=_poll_loop, args=(comm, backend), daemon=True).start()
     threading.Thread(target=_work_loop, args=(comm, backend), daemon=True).start()
 
@@ -125,6 +121,7 @@ def _read_inbox(inbox, seen, deliver=True):
             pending = _pending_confirms.get(confirm_id)
             if pending:
                 pending["ok"] = answer == "yes"
+                pending["answered"] = True  # the router already took the buttons off
                 pending["event"].set()
         elif entry.get("text") or entry.get("voice"):
             _inbox.put(entry)
@@ -146,11 +143,15 @@ def _map_outgoing(comm, backend):
 # --- handling ------------------------------------------------------------------
 
 def _send(backend, text, buttons=None):
+    """Returns the sent message ids ([] if sending failed)."""
     try:
-        for message_id in backend.send_text(text.strip() or "…", buttons=buttons):
-            _outgoing_ids.put(message_id)
+        ids = backend.send_text(text.strip() or "…", buttons=buttons)
     except Exception as e:
         print(f"Telegram: send failed: {e}")
+        return []
+    for message_id in ids:
+        _outgoing_ids.put(message_id)
+    return ids
 
 
 def _send_photo(backend, jpeg, caption=""):
@@ -182,7 +183,9 @@ def send_alert(text, yes_text=None, no_text=None, pending=None):
             {"text": pending["yes"], "callback_data": f"{comm.HANNAH}:{pending['id']}:yes"},
             {"text": pending["no"], "callback_data": f"{comm.HANNAH}:{pending['id']}:no"},
         ]]
-    _send(backend, text, buttons)
+    ids = _send(backend, text, buttons)
+    if pending and ids:
+        pending.setdefault("messages", []).append((ids[-1], text))  # the buttons are on the last piece
     return pending
 
 
@@ -191,9 +194,45 @@ def forget_alert(pending):
         _pending_confirms.pop(pending["id"], None)
 
 
-def _alert_if_away(backend, name):
-    if system_tools.idle_seconds() >= AWAY_IDLE_SECONDS:
-        _send(backend, i18n.get(LANGUAGE, "alarm_remote", name=name))
+def retire_alert(pending, note):
+    """Like forget_alert, and the alert's messages lose their buttons (pressing one would do
+    nothing now) with `note` added below their text. Nothing to edit if a button was pressed:
+    the router took the buttons off then."""
+    forget_alert(pending)
+    backend = _link.get("backend")
+    if not pending or backend is None or pending.get("answered"):
+        return
+    for message_id, text in pending.get("messages", []):
+        try:
+            backend.api("editMessageText", {
+                "chat_id": backend.chat_id, "message_id": message_id, "text": f"{text}\n\n{note}",
+                "reply_markup": {"inline_keyboard": []},
+            })
+        except Exception as e:
+            print(f"Telegram: couldn't update the alert message: {e}")
+
+
+def send(text):
+    """Sends `text` without buttons; False if Telegram isn't set up or sending failed."""
+    backend = _link.get("backend")
+    return backend is not None and bool(_send(backend, text))
+
+
+def send_document(data, filename, caption=""):
+    """Sends a file (bytes); False if Telegram isn't set up or sending failed."""
+    backend = _link.get("backend")
+    if backend is None:
+        return False
+    try:
+        result = backend.api(
+            "sendDocument", {"chat_id": str(backend.chat_id), "caption": caption},
+            files={"document": (filename, data)}, timeout=120,
+        )
+    except Exception as e:
+        print(f"Telegram: document send failed: {e}")
+        return False
+    _outgoing_ids.put(result["message_id"])
+    return True
 
 
 def _download(backend, file_id):

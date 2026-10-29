@@ -6,6 +6,11 @@ mode) with every message, together with the last events and their reasons.
   depend on the mood (happy 2, normal 1, angry 0); with none left the next break is forced: a warning
   `forced_warning_minutes` before, then a fullscreen window with a countdown and no close button (an
   emergency exit with a written reason). No input blocking. Breaks end with a Telegram message.
+- Games (owner, 2026-10-26: an online match can't stop): while a game runs (a program from a game folder;
+  game.fullscreen also counts fullscreen windows, off) the break never pops up or gets forced. Each
+  `every_minutes` a "you've been playing N hours" notice (just OK, no focus); the first is free, each
+  later one costs points.game_hour. A break after such a notice (`afk_break_minutes` without input)
+  gives points.game_break, and the count starts again from 0.
 - Away: no keyboard/mouse input for `afk_minutes` stops the timers (unless a fullscreen video plays);
   `afk_break_minutes` away, or a sleeping PC (a jump in time between two checks), counts as a break.
 - Night (start_hour..end_hour): a sleep warning every hour (points by hour: warning_points); at check_hour she opens the text box and asks
@@ -51,8 +56,23 @@ DEFAULTS = {
     "dry_run": True,  # the owner turns real shutdowns on when ready
     "afk_minutes": 5,
     "sleep_gap_seconds": 120,  # two checks this far apart: the PC slept
-    "break": {"every_minutes": 60, "answer_minutes": 5, "normal_minutes": 10, "forced_minutes": 10,
-              "forced_warning_minutes": 2, "afk_break_minutes": 10},
+    # 5-minute breaks (owner, 2026-10-26; were 10): the break window, the forced one, and time away.
+    "break": {"every_minutes": 60, "answer_minutes": 5, "normal_minutes": 5, "forced_minutes": 5,
+              "forced_warning_minutes": 2, "afk_break_minutes": 5},
+    # What counts as a game (see the docstring). Paths are matched lowercased, anywhere in the exe's path.
+    # fullscreen: also count any fullscreen non-browser/non-player window; off (owner, 2026-10-26: folders only).
+    "game": {"enabled": True, "fullscreen": False,
+             "folders": ["\\steamapps\\common\\", "\\epic games\\", "\\ubisoft game launcher\\games\\",
+                         "\\riot games\\", "\\ea games\\", "\\gog galaxy\\games\\", "\\xboxgames\\"],
+             # Launchers and tools that live in those folders and run all the time (Wallpaper Engine!).
+             "skip_folders": ["\\steamapps\\common\\wallpaper_engine\\", "\\steamapps\\common\\steamworks shared\\",
+                              "\\steamapps\\common\\steam controller configs\\", "\\epic games\\launcher\\",
+                              "\\epic games\\epic online services\\", "\\epic games\\directxredist\\",
+                              "\\riot games\\riot client\\", "\\xboxgames\\gamesave\\"],
+             # Fullscreen but not a game (browsers are known already).
+             "not_fullscreen_games": ["vlc.exe", "mpc-hc64.exe", "mpc-hc.exe", "mpc-be64.exe", "potplayermini64.exe",
+                                      "potplayer.exe", "mpv.exe", "wmplayer.exe", "video.ui.exe", "microsoft.media.player.exe",
+                                      "wallpaper64.exe", "wallpaper32.exe"]},
     "water": {"every_minutes": 20, "later_minutes": 15, "answer_minutes": 5},
     "night": {"start_hour": 0, "end_hour": 6, "check_hour": 3, "answer_minutes": 10, "excuses_per_week": 2,
               "bedtime_gap_hours": 4, "bedtime_from_hour": 22,
@@ -64,7 +84,7 @@ DEFAULTS = {
              "snoozes": {"happy": 2, "normal": 1, "angry": 0},
              "points": {"break": 5, "snooze": -15, "unanswered": -20, "forced_done": 5, "emergency_exit": -30,
                         "water": 1, "water_later": -3, "sleep_warning": -15, "on_time_bed": 10, "peace": 5,
-                        "shutdown_cancel": -30, "night_refused": -30}},
+                        "shutdown_cancel": -30, "night_refused": -30, "game_hour": -5, "game_break": 5}},
     "peace": {"min_hours": 2, "per_day": 2},
     # Affection (owner, 2026-10-25): how close she is to them, apart from the mood. No drift; only the
     # look at each finished conversation (relationship.py) moves it, within these limits.
@@ -265,9 +285,9 @@ def _dt(text):
 
 # --- what's on the screen -------------------------------------------------------------------------------
 
-def fullscreen_video():
-    """True when the window in front covers its whole monitor and its program is playing sound (a video;
-    a game would have input anyway). A maximized window with a title bar doesn't count."""
+def _fullscreen_front():
+    """The exe name of the window in front when it covers its whole monitor, else None. A maximized
+    window with a title bar doesn't count, and neither do the desktop or this app's own windows."""
     import ctypes
     from ctypes import wintypes
 
@@ -276,22 +296,51 @@ def fullscreen_video():
     user32 = desktop_pet.user32
     fg = user32.GetForegroundWindow()
     if not fg:
-        return False
+        return None
     name = ctypes.create_unicode_buffer(64)
     user32.GetClassNameW(fg, name, 64)
     if name.value in desktop_pet.DESKTOP_CLASSES:
-        return False
+        return None
     if user32.IsZoomed(fg) and user32.GetWindowLongW(fg, desktop_pet.GWL_STYLE) & desktop_pet.WS_CAPTION == \
             desktop_pet.WS_CAPTION:
-        return False
+        return None
     info = desktop_pet.MONITORINFO(cbSize=ctypes.sizeof(desktop_pet.MONITORINFO))
     user32.GetMonitorInfoW(user32.MonitorFromWindow(fg, desktop_pet.MONITOR_DEFAULTTONEAREST), ctypes.byref(info))
     rect = wintypes.RECT()
     user32.GetWindowRect(fg, ctypes.byref(rect))
     m = info.rcMonitor
     if not (rect.left <= m.left and rect.top <= m.top and rect.right >= m.right and rect.bottom >= m.bottom):
+        return None
+    pid, exe = desktop_pet._process_name(fg)
+    return None if pid == os.getpid() else exe
+
+
+def playing_game(cfg):
+    """True when a game runs (cfg = the "game" settings): a program from one of the game folders (outside
+    skip_folders), anywhere (alt-tabbed too), or a fullscreen window in front that isn't a browser or a
+    video player (games from anywhere else)."""
+    import psutil
+
+    folders = [f.lower() for f in cfg["folders"]]
+    skip = [f.lower() for f in cfg["skip_folders"]]
+    for p in psutil.process_iter(["exe"]):
+        path = (p.info.get("exe") or "").lower()
+        if path and any(f in path for f in folders) and not any(s in path for s in skip):
+            return True
+    if not cfg["fullscreen"]:
         return False
-    _, exe = desktop_pet._process_name(fg)
+    import desktop_pet
+
+    exe = _fullscreen_front()
+    return bool(exe) and exe not in desktop_pet.BROWSERS and exe not in {n.lower() for n in cfg["not_fullscreen_games"]}
+
+
+def fullscreen_video():
+    """True when the window in front covers its whole monitor and its program is playing sound (a video;
+    a game would have input anyway)."""
+    exe = _fullscreen_front()
+    if exe is None:
+        return False
     try:
         import comtypes
         from pycaw.pycaw import AudioUtilities
@@ -315,7 +364,7 @@ class Care:
     is using, or None when she can't drop in now, `drop_in(text)` -> shows her drop-in line."""
 
     def __init__(self, cfg, store, clock, ui, guard, persona=None, classify=None, notify=None, chat=None,
-                 lang=lambda: "tr", idle=None, video=None, config_path=None, screen=None, drop_in=None):
+                 lang=lambda: "tr", idle=None, video=None, config_path=None, screen=None, drop_in=None, game=None):
         self.cfg, self.store, self.clock, self.ui, self.guard = cfg, store, clock, ui, guard
         self.persona, self.classify = persona, classify
         self.notify = notify or print
@@ -326,6 +375,7 @@ class Care:
         self.lang = lang
         self.idle = idle or system_tools.idle_seconds
         self.video = video or fullscreen_video
+        self.game = game or (lambda: self.cfg["game"]["enabled"] and playing_game(self.cfg["game"]))
         self.config_path = config_path
         self.lock = threading.RLock()
         self.state = store.load(cfg)
@@ -506,8 +556,11 @@ class Care:
                 if (idle >= self.cfg["break"]["afk_break_minutes"] * 60 and not self.away_counted
                         and self.breaking is None):
                     self.away_counted = True
+                    after_game_notice = self.state.get("game_warns", 0) > 0
                     self._reset_cycle(close_prompts=True)
                     self.event("afk_break", now=now, minutes=int(idle // 60))
+                    if after_game_notice:
+                        self.event("game_break", self._points("game_break"), now=now)
             else:
                 self.away_counted = False
                 self._morning(now)
@@ -547,7 +600,7 @@ class Care:
         self.state["mood"] = mood + math.copysign(min(step, abs(base - mood)), base - mood) if mood != base else mood
 
     def _reset_cycle(self, close_prompts=False):
-        self.state.update(active=0.0, cycle=0.0, snoozes=0)
+        self.state.update(active=0.0, cycle=0.0, snoozes=0, game_warns=0)
         self.forced_at = None
         if close_prompts and "break" in self.prompts:
             self.prompts.pop("break")
@@ -598,11 +651,19 @@ class Care:
         cycle = self.state["cycle"]
         if self.forced_at is not None:
             if now >= self.forced_at:
-                self._start_forced(now, "cycle")
+                if self.game():  # a game started after the warning: never forced in a game
+                    self.forced_at = None
+                    self.ui.close("notice")
+                    self._game_notice(now)
+                else:
+                    self._start_forced(now, "cycle")
             return
-        if "break" in self.prompts:
+        if "break" in self.prompts or cycle < every - warn:
             return
-        if cycle >= every - warn and self._next_is_forced():
+        if (cycle >= every or self._next_is_forced()) and self.game():
+            if cycle >= every:
+                self._game_notice(now)
+        elif cycle >= every - warn and self._next_is_forced():
             self.forced_at = now + timedelta(seconds=max(warn if cycle >= every else every - cycle, 0))
             self.event("forced_warning", now=now, minutes=b["forced_warning_minutes"])
             self.ui.notice("forced", self.t("care_forced_warning_title"),
@@ -639,14 +700,31 @@ class Care:
         if prompt and prompt["input"] and now - prompt["since"] >= timedelta(minutes=b["answer_minutes"]):
             self.prompts.pop("break")
             self.ui.close("break")
+            if self.game():  # they went into a game with the prompt open: a game notice, not a snooze
+                self._game_notice(now)
+                return self._water_timeout(now, w)
             self.state["snoozes"] += 1
             self.state["cycle"] = 0.0
             self.event("unanswered", self._points("unanswered"), now=now, count=self.state["snoozes"])
+        self._water_timeout(now, w)
+
+    def _water_timeout(self, now, w):
         prompt = self.prompts.get("water")
         if prompt and now - prompt["since"] >= timedelta(minutes=w["answer_minutes"]):
             self.prompts.pop("water")
             self.ui.close("water")
             self._water_later(now, quiet=True)
+
+    def _game_notice(self, now):
+        """An hour more in a game: a notice that doesn't take the focus, no buttons, never forced. The first
+        since the last break is free; each later one costs game_hour. Snoozes don't change."""
+        warns = self.state.get("game_warns", 0)
+        hours = max(1, round(self.state["active"] / 3600))
+        self.state["game_warns"] = warns + 1
+        self.state["cycle"] = 0.0
+        self.event("game_reminder", self._points("game_hour") if warns else 0, now=now, hours=hours)
+        self.ui.notice("game", self.t("care_game_title"), self.toned("care_game_prompt", now, hours=hours),
+                       self.clock.real_seconds(self.cfg["break"]["answer_minutes"] * 60), sound=True)
 
     def _start_normal(self, now):
         minutes = self.cfg["break"]["normal_minutes"]

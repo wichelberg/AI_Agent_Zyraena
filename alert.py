@@ -7,22 +7,12 @@ _winmm = ctypes.windll.winmm
 _queue = queue.Queue()
 _alias_counter = itertools.count(1)
 _popups = {}  # token -> close function, only used on the Tk thread
+_silencers = {}  # token -> stops that popup's sound, only used on the Tk thread
 
 
 def _mci(command: str) -> None:
     buf = ctypes.create_unicode_buffer(255)
     _winmm.mciSendStringW(command, buf, 254, 0)
-
-
-# Set by telegram_listener: also tells the user on Telegram when they're away from the PC.
-remote_hook = None
-
-
-def trigger_alert(name: str, sound_path: str) -> None:
-    """Thread-safe. Call from any event thread to request a popup+sound alert."""
-    _queue.put(("popup", None, name, sound_path, ("OK",), None, "Event Alert"))
-    if remote_hook is not None:
-        remote_hook(name)
 
 
 def show_choice(token, text, sound_path, choices, on_choice, title="Zyraena", close_choice=None):
@@ -38,9 +28,15 @@ def close(token) -> None:
     _queue.put(("close", token))
 
 
+def silence(token) -> None:
+    """Thread-safe. Stops the sound of the popup shown with this token but leaves the popup open."""
+    _queue.put(("silence", token))
+
+
 def _open_popup(root, token, text, sound_path, choices, on_choice, title, close_choice=None):
     alias = f"event_alert_{next(_alias_counter)}"
-    if sound_path is not None:
+    playing = sound_path is not None
+    if playing:
         _mci(f'open "{sound_path}" alias {alias}')
         _mci(f"play {alias} repeat")
 
@@ -51,10 +47,17 @@ def _open_popup(root, token, text, sound_path, choices, on_choice, title, close_
 
     tk.Label(win, text=text, font=("Segoe UI", 14), padx=30, pady=20, justify="left").pack()
 
+    def stop_sound():
+        nonlocal playing
+        if playing:
+            playing = False
+            _mci(f"stop {alias}")
+            _mci(f"close {alias}")
+
     def close_popup():
-        _mci(f"stop {alias}")
-        _mci(f"close {alias}")
+        stop_sound()
         _popups.pop(token, None)
+        _silencers.pop(token, None)
         if win.winfo_exists():
             win.destroy()
 
@@ -75,6 +78,7 @@ def _open_popup(root, token, text, sound_path, choices, on_choice, title, close_
         win.protocol("WM_DELETE_WINDOW", close_popup)
     if token is not None:
         _popups[token] = close_popup
+        _silencers[token] = stop_sound
 
 
 def _poll_queue(root: tk.Tk) -> None:
@@ -84,6 +88,8 @@ def _poll_queue(root: tk.Tk) -> None:
             _open_popup(root, token, *rest)
         elif kind == "close" and token in _popups:
             _popups[token]()
+        elif kind == "silence" and token in _silencers:
+            _silencers[token]()
     root.after(200, _poll_queue, root)
 
 
